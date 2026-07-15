@@ -2,7 +2,10 @@ use super::storage::{form_data_entries, form_data_is_object, push_form_data_entr
 use super::*;
 use crate::custom_elements::is_form_associated_custom_element_handle;
 use crate::dom::{
-    forms::{InputType, apply_textarea_wrapping_transformation},
+    forms::{
+        InputType, OptionDisabledAncestorStep, apply_textarea_wrapping_transformation,
+        option_disabled_ancestor_step,
+    },
     native::Node,
 };
 use crate::native_bridge::{
@@ -10,7 +13,7 @@ use crate::native_bridge::{
         control_has_datalist_ancestor, element_internals_form_value_for_target,
         form_control_is_effectively_disabled, form_data_control_elements, text_control_value,
     },
-    node_runtime_and_handle_from_object_or_detached,
+    node_owner_document_relevant_context, node_runtime_and_handle_from_object_or_detached,
 };
 use moli_encoding::is_charset_sentinel_name;
 use moli_webapi_declare::WebApiObject;
@@ -28,6 +31,14 @@ pub(super) fn serialize_form_data_controls<'s>(
     form_handle: crate::document_runtime::DomHandle,
     submitter: Option<v8::Local<'s, v8::Object>>,
 ) -> Vec<(String, v8::Global<v8::Value>)> {
+    let context = node_owner_document_relevant_context(scope, runtime_ptr, form_handle)
+        .unwrap_or_else(|| scope.get_current_context());
+    let scope = &mut v8::ContextScope::new(scope, context);
+    let submitter = submitter.and_then(|object| {
+        let (owner, handle) =
+            node_runtime_and_handle_from_object_or_detached(scope, object).ok()?;
+        (owner == runtime_ptr).then_some(handle)
+    });
     let mut entries = Vec::new();
     let controls = form_data_control_elements(unsafe { &*runtime_ptr }, form_handle);
     for handle in controls {
@@ -501,18 +512,21 @@ fn control_is_in_first_legend<'s>(
 }
 
 fn option_is_disabled(scope: &mut v8::PinScope<'_, '_>, option: v8::Local<'_, v8::Object>) -> bool {
-    let mut current = Some(option);
+    if object_bool_property(scope, option, "disabled").unwrap_or(false) {
+        return true;
+    }
+
+    let mut current = object_property_as_object(scope, option, "parentElement");
     while let Some(element) = current {
-        let tag = object_string_property_defined(scope, element, "tagName")
-            .map(|tag| tag.to_ascii_lowercase())
-            .unwrap_or_default();
-        if matches!(tag.as_str(), "option" | "optgroup")
-            && object_bool_property(scope, element, "disabled").unwrap_or(false)
-        {
-            return true;
-        }
-        if tag == "select" {
-            return false;
+        let namespace =
+            object_string_property_defined(scope, element, "namespaceURI").unwrap_or_default();
+        let local_name =
+            object_string_property_defined(scope, element, "localName").unwrap_or_default();
+        let has_disabled_attribute =
+            object_bool_property(scope, element, "disabled").unwrap_or(false);
+        match option_disabled_ancestor_step(&namespace, &local_name, has_disabled_attribute) {
+            OptionDisabledAncestorStep::Continue => {}
+            OptionDisabledAncestorStep::Disabled(disabled) => return disabled,
         }
         current = object_property_as_object(scope, element, "parentElement");
     }
