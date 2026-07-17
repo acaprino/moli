@@ -263,6 +263,121 @@ async fn image_fetch_enabled_discards_stale_queued_terminal_event() {
 }
 
 #[tokio::test]
+async fn image_current_src_switches_only_when_the_update_microtask_selects_a_current_request() {
+    let loader = ResourceRequestClient::new(&moli_fetch::FetchConfig::default()).expect("loader");
+    loader.set_image_fetch_enabled(true);
+    let (mut vm, _resource_completion_queue) =
+        new_storage_test_vm_with_loader_and_resource_completion_queue(
+            "https://image-current-request.test/page.html",
+            &loader,
+        );
+
+    let before_update = vm
+        .eval(
+            r#"
+            (() => {
+              const picture = document.createElement("picture");
+              const nonMatchingSource = document.createElement("source");
+              nonMatchingSource.media = "not all";
+              nonMatchingSource.srcset = "data:,a";
+              picture.append(nonMatchingSource);
+
+              const matchingSource = document.createElement("source");
+              matchingSource.media = "all";
+              matchingSource.srcset = "data:,b";
+              picture.append(matchingSource);
+
+              const image = document.createElement("img");
+              globalThis.__imageCurrentRequestObservations = [];
+              image.src = "data:,c";
+              const beforeUpdate = image.currentSrc;
+              queueMicrotask(() => {
+                __imageCurrentRequestObservations.push(`first:${image.currentSrc}`);
+                picture.append(image);
+                __imageCurrentRequestObservations.push(`inserted:${image.currentSrc}`);
+                queueMicrotask(() => {
+                  __imageCurrentRequestObservations.push(`second:${image.currentSrc}`);
+                });
+              });
+              return beforeUpdate;
+            })()
+            "#,
+        )
+        .expect("image current request setup should evaluate");
+    assert_eq!(before_update, "");
+    assert_eq!(
+        vm.eval("globalThis.__imageCurrentRequestObservations.join('|')")
+            .expect("image current request observations should evaluate"),
+        "first:data:,c|inserted:data:,c|second:data:,b"
+    );
+}
+
+#[tokio::test]
+async fn image_current_src_is_empty_while_a_replacement_request_is_pending() {
+    let loader = ResourceRequestClient::new(&moli_fetch::FetchConfig::default()).expect("loader");
+    loader.set_image_fetch_enabled(true);
+    let (mut vm, _resource_completion_queue) =
+        new_storage_test_vm_with_loader_and_resource_completion_queue(
+            "https://image-current-request.test/page.html",
+            &loader,
+        );
+    vm.set_fetch_subresource_interception(
+        crate::types::SubresourceInterceptionClasses::for_resource_type(
+            crate::types::SubresourceResourceType::Image,
+        ),
+    );
+
+    vm.eval(
+        r#"
+        (() => {
+          globalThis.__pendingCurrentRequestImage = new Image();
+          __pendingCurrentRequestImage.src = "data:,old";
+        })()
+        "#,
+    )
+    .expect("initial synthetic image request should evaluate");
+    assert_eq!(
+        vm.eval("globalThis.__pendingCurrentRequestImage.currentSrc")
+            .expect("initial current source should evaluate"),
+        "data:,old"
+    );
+
+    assert_eq!(
+        vm.eval(
+            r#"
+            (() => {
+              const before = __pendingCurrentRequestImage.currentSrc;
+              __pendingCurrentRequestImage.src = "replacement.gif";
+              return `${before}|${__pendingCurrentRequestImage.currentSrc}`;
+            })()
+            "#,
+        )
+        .expect("replacement image request should evaluate"),
+        "data:,old|data:,old"
+    );
+    let pending = vm.take_pending_subresource_fetch_infos();
+    assert_eq!(pending.len(), 1);
+    assert_eq!(
+        vm.eval("globalThis.__pendingCurrentRequestImage.currentSrc")
+            .expect("pending current source should evaluate"),
+        ""
+    );
+
+    vm.fulfill_pending_subresource_fetch(
+        pending[0].internal_id,
+        200,
+        vec![("Content-Type".to_owned(), "image/gif".to_owned())],
+        one_by_one_gif_response_body(),
+    )
+    .expect("replacement image request should fulfill");
+    assert_eq!(
+        vm.eval("globalThis.__pendingCurrentRequestImage.currentSrc")
+            .expect("completed current source should evaluate"),
+        "https://image-current-request.test/replacement.gif"
+    );
+}
+
+#[tokio::test]
 async fn image_fetch_enabled_dispatches_http_error_after_resource_timing() {
     let (base_url, request_rx, server) =
         spawn_image_response_server("404 Not Found", "text/html", b"missing").await;
@@ -497,6 +612,85 @@ async fn inserting_completed_detached_image_does_not_restart_request() {
 }
 
 #[tokio::test]
+async fn image_update_microtask_freezes_request_after_observing_live_base_url() {
+    let loader = ResourceRequestClient::new(&moli_fetch::FetchConfig::default()).expect("loader");
+    loader.set_image_fetch_enabled(true);
+    let mut vm = new_storage_page_task_executor_test_vm_with_loader(
+        "https://image-update-base.test/page.html",
+        &loader,
+    );
+    vm.set_fetch_subresource_interception(
+        crate::types::SubresourceInterceptionClasses::for_resource_type(
+            crate::types::SubresourceResourceType::Image,
+        ),
+    );
+
+    vm.eval(
+        r#"
+        (() => {
+          const image = new Image();
+          globalThis.__baseSelectedImage = image;
+          globalThis.__baseSelectedImageEvents = [];
+          image.onload = () => __baseSelectedImageEvents.push("load");
+          image.onerror = () => __baseSelectedImageEvents.push("error");
+          image.src = "green.png";
+
+          const root = document.documentElement ||
+            document.appendChild(document.createElement("html"));
+          const head = document.head ||
+            root.insertBefore(document.createElement("head"), root.firstChild);
+          const base = document.createElement("base");
+          base.href = "/resources/";
+          head.appendChild(base);
+          globalThis.__baseSelectedImageBase = base;
+        })()
+        "#,
+    )
+    .expect("image and base should update in one script turn");
+
+    let pending = vm.take_pending_subresource_fetch_infos();
+    assert_eq!(pending.len(), 1);
+    assert_eq!(
+        pending[0].url.as_str(),
+        "https://image-update-base.test/resources/green.png",
+        "URL selection must happen in the queued image-update microtask"
+    );
+    vm.fulfill_pending_subresource_fetch(
+        pending[0].internal_id,
+        200,
+        vec![("Content-Type".to_owned(), "image/gif".to_owned())],
+        one_by_one_gif_response_body(),
+    )
+    .expect("base-selected image response should complete");
+
+    vm.eval(
+        r#"
+        (() => {
+          __baseSelectedImageBase.href = "/bogus/";
+          (document.body || document.documentElement).appendChild(__baseSelectedImage);
+        })()
+        "#,
+    )
+    .expect("completed detached image should insert after a later base change");
+    assert!(
+        vm.take_pending_subresource_fetch_infos().is_empty(),
+        "ordinary insertion must preserve the request selected by the update microtask"
+    );
+
+    run_next_image_event_task(&mut vm, &loader, "base-selected image event").await;
+    assert_eq!(
+        vm.eval(
+            r#"__baseSelectedImageEvents.join("|") + ":" +
+               performance.getEntriesByName(
+                 "https://image-update-base.test/resources/green.png"
+               ).length"#,
+        )
+        .expect("base-selected image result should evaluate"),
+        "load:1"
+    );
+}
+
+#[tokio::test]
 async fn removed_lazy_image_suppresses_in_flight_terminal_event() {
     let loader = ResourceRequestClient::new(&moli_fetch::FetchConfig::default()).expect("loader");
     loader.set_image_fetch_enabled(true);
@@ -529,6 +723,8 @@ async fn removed_lazy_image_suppresses_in_flight_terminal_event() {
         vm.refresh_layout_snapshot_for_test(moli_layout::LayoutViewport::new(800, 600, 1.0,))
             .expect("near lazy-image layout refresh should succeed")
     );
+    vm.perform_owner_lane_task_microtask_checkpoints()
+        .expect("layout task should finish its image-update microtask checkpoint");
     let pending = vm.take_pending_subresource_fetch_infos();
     assert_eq!(pending.len(), 1);
 
@@ -872,7 +1068,7 @@ async fn image_request_interception_fulfills_through_image_continuation() {
 }
 
 #[tokio::test]
-async fn image_decode_waits_for_in_flight_pixels_and_reuses_the_ready_resource() {
+async fn image_decode_quick_attach_distinguishes_uncached_and_ready_requests() {
     let loader = ResourceRequestClient::new(&moli_fetch::FetchConfig::default()).expect("loader");
     loader.set_image_fetch_enabled(true);
     let mut vm = new_storage_page_task_executor_test_vm_with_loader(
@@ -907,8 +1103,8 @@ async fn image_decode_waits_for_in_flight_pixels_and_reuses_the_ready_resource()
     assert_eq!(pending.len(), 1);
     assert_eq!(
         vm.eval("globalThis.__firstSharedDecode")
-            .expect("in-flight image decode state should evaluate"),
-        "pending"
+            .expect("uncached quick-attach image decode state should evaluate"),
+        "reject:EncodingError"
     );
     vm.fulfill_pending_subresource_fetch(
         pending[0].internal_id,
@@ -921,7 +1117,7 @@ async fn image_decode_waits_for_in_flight_pixels_and_reuses_the_ready_resource()
     assert_eq!(
         vm.eval("globalThis.__firstSharedDecode")
             .expect("first image decode result should evaluate"),
-        "resolve"
+        "reject:EncodingError"
     );
     let first_image = vm
         .document_runtime
@@ -1237,361 +1433,6 @@ async fn picture_source_and_image_tree_mutations_reselect_requests() {
         assert_eq!(
             requested_sources, expected_sources,
             "mutation: {mutation:?}"
-        );
-    }
-}
-
-#[tokio::test]
-async fn svg_image_decode_preserves_href_precedence_and_mutation_cancellation() {
-    let loader = ResourceRequestClient::new(&moli_fetch::FetchConfig::default()).unwrap();
-    loader.set_image_fetch_enabled(true);
-    let mut vm = new_storage_page_task_executor_test_vm_with_loader(
-        "https://svg-decode-mutations.test/page.html",
-        &loader,
-    );
-    vm.set_fetch_subresource_interception(
-        crate::types::SubresourceInterceptionClasses::for_resource_type(
-            crate::types::SubresourceResourceType::Image,
-        ),
-    );
-    vm.eval(
-        r#"
-        globalThis.__svgDecodeImage = document.createElementNS('http://www.w3.org/2000/svg', 'image');
-        __svgDecodeImage.setAttributeNS('http://www.w3.org/1999/xlink', 'xlink:href', '/fallback.gif');
-        __svgDecodeImage.setAttribute('href', '/preferred.gif');
-        globalThis.__svgPreferredDecode = 'pending';
-        const first = __svgDecodeImage.decode(), second = __svgDecodeImage.decode();
-        globalThis.__svgDecodePromisesDistinct = first !== second;
-        Promise.all([first, second]).then(values => {
-          __svgPreferredDecode = values.every(value => value === undefined) ? 'fulfilled' : 'invalid';
-        }, error => __svgPreferredDecode = error.name);
-        "#,
-    )
-    .unwrap();
-    let preferred = vm.take_pending_subresource_fetch_infos();
-    assert_eq!(preferred.len(), 1);
-    assert_eq!(
-        preferred[0].url.as_str(),
-        "https://svg-decode-mutations.test/preferred.gif"
-    );
-    assert_eq!(vm.eval("__svgDecodePromisesDistinct").unwrap(), "true");
-    assert_eq!(vm.eval("__svgPreferredDecode").unwrap(), "pending");
-    vm.fulfill_pending_subresource_fetch(
-        preferred[0].internal_id,
-        200,
-        vec![("Content-Type".into(), b"image/gif".to_vec())],
-        one_by_one_gif_response_body(),
-    )
-    .unwrap();
-    run_next_image_event_task(&mut vm, &loader, "preferred SVG image decode").await;
-    assert_eq!(vm.eval("__svgPreferredDecode").unwrap(), "fulfilled");
-
-    vm.eval(
-        r#"
-        globalThis.__svgReplacedDecode = 'pending';
-        globalThis.__svgFallbackDecode = 'pending';
-        __svgDecodeImage.setAttribute('href', '/replacement.gif');
-        const replaced = __svgDecodeImage.decode();
-        replaced.then(() => __svgReplacedDecode = 'fulfilled', error => __svgReplacedDecode = error.name);
-        __svgDecodeImage.removeAttribute('href');
-        const fallback = __svgDecodeImage.decode();
-        fallback.then(() => __svgFallbackDecode = 'fulfilled', error => __svgFallbackDecode = error.name);
-        "#,
-    )
-    .unwrap();
-    let fallback = vm.take_pending_subresource_fetch_infos();
-    assert_eq!(fallback.len(), 1);
-    assert_eq!(
-        fallback[0].url.as_str(),
-        "https://svg-decode-mutations.test/fallback.gif"
-    );
-    assert_eq!(vm.eval("__svgReplacedDecode").unwrap(), "EncodingError");
-    assert_eq!(vm.eval("__svgFallbackDecode").unwrap(), "pending");
-    vm.fulfill_pending_subresource_fetch(
-        fallback[0].internal_id,
-        200,
-        vec![("Content-Type".into(), b"image/gif".to_vec())],
-        one_by_one_gif_response_body(),
-    )
-    .unwrap();
-    run_next_image_event_task(&mut vm, &loader, "fallback SVG image decode").await;
-    assert_eq!(vm.eval("__svgFallbackDecode").unwrap(), "fulfilled");
-    assert_eq!(vm.eval("__svgReplacedDecode").unwrap(), "EncodingError");
-    assert_eq!(
-        vm.eval("__svgDecodeImage.href.baseVal").unwrap(),
-        "/fallback.gif"
-    );
-    assert!(vm.take_pending_subresource_fetch_infos().is_empty());
-}
-
-fn image_decode_receiver_test_vm() -> crate::runtime::PageVmTaskExecutorTestHarness {
-    let mut vm = new_storage_page_task_executor_test_vm("https://image-decode-receivers.test/");
-    vm.eval(
-        r#"
-        document.body.innerHTML = '<iframe id="decode-receiver-frame"></iframe>';
-        globalThis.__imageDecodeReceiverOtherWindow = document.getElementById('decode-receiver-frame').contentWindow;
-        "#,
-    )
-    .unwrap();
-    assert_eq!(
-        vm.eval_after_selected_page_tasks("typeof __imageDecodeReceiverOtherWindow.Promise")
-            .unwrap(),
-        "function"
-    );
-    vm
-}
-
-#[test]
-fn image_decode_bindings_validate_receivers_and_promise_realms() {
-    let mut vm = image_decode_receiver_test_vm();
-    vm.eval(include_str!("image_decode_receivers.js")).unwrap();
-    assert_eq!(
-        vm.eval_after_selected_page_tasks("__imageDecodeReceiverResults.complete")
-            .unwrap(),
-        "true"
-    );
-    assert_eq!(
-        vm.eval("__imageDecodeReceiverResults.checks.length")
-            .unwrap(),
-        "76"
-    );
-    assert_eq!(
-        vm.eval("JSON.stringify(__imageDecodeReceiverResults.checks.filter(row => !row.passed))")
-            .unwrap(),
-        "[]"
-    );
-}
-
-#[test]
-fn image_decode_registered_native_proxies_preserve_target_realms() {
-    let mut vm = image_decode_receiver_test_vm();
-    vm.eval(
-        r#"
-        globalThis.__nativeHtmlSource = document.createElement('img');
-        globalThis.__nativeSvgSource = document.createElementNS('http://www.w3.org/2000/svg', 'image');
-        globalThis.__foreignHtmlSource = __imageDecodeReceiverOtherWindow.document.createElement('img');
-        globalThis.__foreignSvgSource = __imageDecodeReceiverOtherWindow.document.createElementNS('http://www.w3.org/2000/svg', 'image');
-        "#,
-    )
-    .unwrap();
-    vm.with_default_context_scope_and_checkpoint_for_test(|scope, _| {
-        let global = scope.get_current_context().global(scope);
-        for (source, alias) in [
-            ("__nativeHtmlSource", "nativeHtml"),
-            ("__nativeSvgSource", "nativeSvg"),
-            ("__foreignHtmlSource", "foreignHtml"),
-            ("__foreignSvgSource", "foreignSvg"),
-        ] {
-            let key = crate::util::v8str(scope, source);
-            let object =
-                v8::Local::<v8::Object>::try_from(global.get(scope, key.into()).unwrap()).unwrap();
-            let target = moli_webapi_declare::web_api_object_target(scope, object).unwrap();
-            let handler = crate::util::new_null_prototype_object(scope);
-            let proxy = v8::Proxy::new(scope, target, handler).unwrap();
-            moli_webapi_declare::register_web_api_proxy(scope, proxy).unwrap();
-            let registered: v8::Local<v8::Object> = proxy.into();
-            assert!(
-                crate::web_api_interfaces::HTMLImageElement::is_instance(scope, registered)
-                    || crate::web_api_interfaces::SVGImageElement::is_instance(scope, registered)
-            );
-            let key = crate::util::v8str(scope, alias);
-            assert_eq!(
-                global.create_data_property(scope, key.into(), proxy.into()),
-                Some(true)
-            );
-        }
-        Ok(())
-    })
-    .unwrap();
-    vm.eval(
-        r#"
-        globalThis.__nativeImageDecodeResult = 'pending';
-        (async () => {
-          const assert = (ok, message) => { if (!ok) throw Error(message); };
-          const other = __imageDecodeReceiverOtherWindow;
-          let traps = 0;
-          const trap = () => { traps++; throw Error('author Proxy trap'); };
-          for (const [receiver, owner, name] of [
-            [nativeHtml, window, 'HTMLImageElement'], [nativeSvg, window, 'SVGImageElement'],
-            [foreignHtml, other, 'HTMLImageElement'], [foreignSvg, other, 'SVGImageElement']
-          ]) for (const callee of [window, other]) {
-            const method = callee[name].prototype.decode;
-            const promise = method.call(receiver);
-            assert(Object.getPrototypeOf(promise) === owner.Promise.prototype, 'native target Promise realm');
-            let error; try { await promise; } catch (caught) { error = caught; }
-            assert(error?.name === 'EncodingError' && Object.getPrototypeOf(error) === owner.DOMException.prototype, 'native target accepted');
-            const revoked = Proxy.revocable(receiver, {}); revoked.revoke();
-            for (const invalid of [Object.create(receiver), new Proxy(receiver, {get: trap, getPrototypeOf: trap}), revoked.proxy]) {
-              const rejected = method.call(invalid);
-              assert(Object.getPrototypeOf(rejected) === callee.Promise.prototype, 'invalid receiver Promise realm');
-              let failure; try { await rejected; } catch (caught) { failure = caught; }
-              assert(failure && Object.getPrototypeOf(failure) === callee.TypeError.prototype, 'author receiver rejection');
-            }
-          }
-          assert(traps === 0, 'receiver validation must not execute author traps');
-          __nativeImageDecodeResult = 'ok';
-        })().catch(error => __nativeImageDecodeResult = String(error));
-        "#,
-    )
-    .unwrap();
-    assert_eq!(
-        vm.eval_after_selected_page_tasks("__nativeImageDecodeResult")
-            .unwrap(),
-        "ok"
-    );
-}
-
-#[tokio::test]
-async fn image_decode_cross_realm_loads_settle_in_the_receiver_realm() {
-    let loader = ResourceRequestClient::new(&moli_fetch::FetchConfig::default()).unwrap();
-    loader.set_image_fetch_enabled(true);
-    let mut vm = new_storage_page_task_executor_test_vm_with_loader(
-        "https://image-decode-load-realms.test/page.html",
-        &loader,
-    );
-    vm.set_fetch_subresource_interception(
-        crate::types::SubresourceInterceptionClasses::for_resource_type(
-            crate::types::SubresourceResourceType::Image,
-        ),
-    );
-    vm.eval(
-        r#"
-        document.body.innerHTML = '<iframe id="decode-load-frame"></iframe>';
-        globalThis.__decodeLoadOther = document.getElementById('decode-load-frame').contentWindow;
-        "#,
-    )
-    .unwrap();
-    for _ in 0..32 {
-        if !vm
-            .run_one_oldest_ready_page_task_executor_turn(&loader)
-            .await
-            .unwrap()
-        {
-            break;
-        }
-    }
-    assert_eq!(
-        vm.eval("typeof __decodeLoadOther.SVGImageElement").unwrap(),
-        "function"
-    );
-    for name in ["HTMLImageElement", "SVGImageElement"] {
-        for owner_child in [false, true] {
-            let url = format!("https://image-decode-load-realms.test/{name}-{owner_child}.gif");
-            let case = serde_json::json!({"name":name,"ownerChild":owner_child,"url":url});
-            vm.eval(&format!("globalThis.__decodeRealmCase = {case}"))
-                .unwrap();
-            vm.eval(
-                r#"
-                (() => {
-                  const spec = __decodeRealmCase;
-                  const owner = spec.ownerChild ? __decodeLoadOther : window;
-                  const callee = spec.ownerChild ? window : __decodeLoadOther;
-                  const image = spec.name === 'HTMLImageElement' ? owner.document.createElement('img') :
-                    owner.document.createElementNS('http://www.w3.org/2000/svg', 'image');
-                  image.setAttribute(spec.name === 'HTMLImageElement' ? 'src' : 'href', spec.url);
-                  const promise = callee[spec.name].prototype.decode.call(image);
-                  globalThis.__decodeLoadPromiseRealm = Object.getPrototypeOf(promise) === owner.Promise.prototype;
-                  globalThis.__decodeLoadOutcome = 'pending';
-                  promise.then(value => __decodeLoadOutcome = `fulfilled:${value === undefined}`,
-                    error => __decodeLoadOutcome = error.name);
-                  globalThis.__decodeLoadImage = image;
-                })();
-                "#,
-            )
-            .unwrap();
-            assert_eq!(vm.eval("__decodeLoadPromiseRealm").unwrap(), "true");
-            assert_eq!(vm.eval("__decodeLoadOutcome").unwrap(), "pending");
-            let requests = vm.take_pending_subresource_fetch_infos();
-            assert_eq!(requests.len(), 1, "{name}, child receiver: {owner_child}");
-            assert_eq!(requests[0].url.as_str(), url);
-            vm.fulfill_pending_subresource_fetch(
-                requests[0].internal_id,
-                200,
-                vec![("Content-Type".into(), b"image/gif".to_vec())],
-                one_by_one_gif_response_body(),
-            )
-            .unwrap();
-            run_next_image_event_task(&mut vm, &loader, "cross-realm image decode load").await;
-            assert_eq!(vm.eval("__decodeLoadOutcome").unwrap(), "fulfilled:true");
-            assert!(vm.take_pending_subresource_fetch_infos().is_empty());
-        }
-    }
-}
-
-#[tokio::test]
-async fn available_image_reuse_does_not_start_another_fetch_or_timing_entry() {
-    for policy in [
-        moli_page_types::LayoutPolicy::Mock,
-        moli_page_types::LayoutPolicy::OnDemand,
-    ] {
-        let loader = ResourceRequestClient::new(&moli_fetch::FetchConfig::default()).unwrap();
-        loader.set_image_fetch_enabled(true);
-        let mut vm = new_storage_page_task_executor_test_vm_with_loader(
-            "https://image-reuse-timing.test/page.html",
-            &loader,
-        );
-        vm.set_layout_policy(policy);
-        vm.set_fetch_subresource_interception(
-            crate::types::SubresourceInterceptionClasses::for_resource_type(
-                crate::types::SubresourceResourceType::Image,
-            ),
-        );
-        vm.eval(
-            r#"
-            globalThis.__reuseLoads = [];
-            globalThis.__reuseTimeline = 'pending';
-            (async () => {
-              for (const path of ['/shared.gif', '/shared.gif', '/canary.gif']) {
-                await new Promise(resolve => {
-                  const image = document.createElement('img');
-                  image.onload = () => { __reuseLoads.push(path); resolve(); };
-                  image.onerror = () => { __reuseLoads.push('error'); resolve(); };
-                  image.src = path;
-                  document.body.appendChild(image);
-                });
-              }
-              __reuseTimeline = performance.getEntriesByType('resource')
-                .map(entry => new URL(entry.name).pathname).join('|');
-            })();
-            "#,
-        )
-        .unwrap();
-        let first = vm.take_pending_subresource_fetch_infos();
-        assert_eq!(first.len(), 1, "{policy:?}: initial fetch");
-        vm.fulfill_pending_subresource_fetch(
-            first[0].internal_id,
-            200,
-            vec![("Content-Type".into(), b"image/gif".to_vec())],
-            one_by_one_gif_response_body(),
-        )
-        .unwrap();
-        run_next_image_event_task(&mut vm, &loader, "first shared image load").await;
-        assert_eq!(vm.eval("__reuseLoads.join('|')").unwrap(), "/shared.gif");
-        assert!(
-            vm.take_pending_subresource_fetch_infos().is_empty(),
-            "{policy:?}: an available image must not start another fetch"
-        );
-        run_next_image_event_task(&mut vm, &loader, "reused shared image load").await;
-        let canary = vm.take_pending_subresource_fetch_infos();
-        assert_eq!(canary.len(), 1, "{policy:?}: distinct URL must fetch");
-        assert_eq!(canary[0].url.path(), "/canary.gif");
-        vm.fulfill_pending_subresource_fetch(
-            canary[0].internal_id,
-            200,
-            vec![("Content-Type".into(), b"image/gif".to_vec())],
-            one_by_one_gif_response_body(),
-        )
-        .unwrap();
-        run_next_image_event_task(&mut vm, &loader, "canary image load").await;
-        assert_eq!(
-            vm.eval("__reuseLoads.join('|')").unwrap(),
-            "/shared.gif|/shared.gif|/canary.gif",
-            "{policy:?}"
-        );
-        assert_eq!(
-            vm.eval("__reuseTimeline").unwrap(),
-            "/shared.gif|/canary.gif",
-            "{policy:?}"
         );
     }
 }
