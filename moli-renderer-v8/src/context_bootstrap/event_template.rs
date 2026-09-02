@@ -8,7 +8,8 @@ use super::{
     events::{
         before_unload_event_return_value_getter, before_unload_event_return_value_setter,
         close_event_code_getter_function, close_event_reason_getter_function,
-        close_event_was_clean_getter_function, event_bubbles_getter_function,
+        close_event_was_clean_getter_function, command_event_command_getter_function,
+        command_event_source_getter_function, event_bubbles_getter_function,
         event_cancel_bubble_getter_function, event_cancel_bubble_setter_function,
         event_cancelable_getter_function, event_composed_getter_function,
         event_composed_path_callback, event_current_target_getter_function,
@@ -186,6 +187,16 @@ struct HashChangeEventTemplateAccessorsDeclaration {
     old_url: (),
     #[webapi(accessor_property = "newURL", getter = event_value_attribute_getter, data = crate::util::v8str(scope, "newURL"))]
     new_url: (),
+}
+
+#[derive(WebApiFunctionTemplate)]
+#[webapi(interface = web_api_interfaces::CommandEvent, enumerable, receiver)]
+struct CommandEventTemplateAccessorsDeclaration {
+    #[webapi(accessor_property, getter = command_event_source_getter_function)]
+    source: (),
+
+    #[webapi(accessor_property, getter = command_event_command_getter_function)]
+    command: (),
 }
 
 #[derive(WebApiFunctionTemplate)]
@@ -528,6 +539,9 @@ fn install_declaration<'s, D: WebApiFunctionTemplateDeclaration>(
 // prototype mutations cannot change which fields are exposed as own properties.
 fn event_template_declaration(interface: &str) -> Option<EventTemplateDeclaration> {
     Some(match interface {
+        "CommandEvent" => {
+            EventTemplateDeclaration::new::<CommandEventTemplateAccessorsDeclaration>()
+        }
         "ErrorEvent" => EventTemplateDeclaration::new::<ErrorEventTemplateAccessorsDeclaration>(),
         "SecurityPolicyViolationEvent" => EventTemplateDeclaration::new::<
             SecurityPolicyViolationEventTemplateAccessorsDeclaration,
