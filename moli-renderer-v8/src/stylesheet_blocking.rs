@@ -325,6 +325,7 @@ impl StylesheetResponseProvenance {
                 request_origin,
                 head,
                 moli_fetch::RequestMode::NoCors,
+                moli_fetch::RequestRedirectMode::Follow,
             )
             .is_none(),
             Self::ServiceWorker { filter } => {
