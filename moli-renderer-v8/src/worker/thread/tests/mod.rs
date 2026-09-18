@@ -1618,6 +1618,7 @@ mod stream_clone_failures;
 mod synthetic_exceptions;
 mod tls;
 mod trusted_types_reporting;
+mod wasm_csp;
 mod xhr_failure;
 
 mod payment_events;
