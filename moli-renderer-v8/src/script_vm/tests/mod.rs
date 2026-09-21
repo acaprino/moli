@@ -11,6 +11,7 @@ mod cross_origin_navigation;
 mod current_pass_css_fonts;
 mod document_encodings;
 mod document_location_activity;
+mod dom_rect_factory_descriptors;
 mod drag_drop_outcomes;
 mod idb_transaction_gc;
 mod message_port_transfer;
@@ -2383,6 +2384,7 @@ mod svg_animated_value_native_receivers;
 mod native_exception_stack_capture;
 mod native_input_validation;
 mod native_node_event_outcomes;
+mod navigation_timing_inheritance;
 mod no_cors_header_fill;
 mod node_event_worlds;
 mod node_root_dictionary;
@@ -2454,6 +2456,7 @@ mod webidl_fetch;
 
 mod idb_object_store_native_receivers;
 
+mod history_replace_forward;
 mod webidl_receivers;
 mod webidl_trusted_types;
 mod websocket;
@@ -2468,6 +2471,8 @@ mod window_scheduling_receivers;
 
 mod window_immutable_prototype_chain;
 
+mod extracted;
+mod payment_response_interfaces;
 mod window_getter_consolidation;
 mod window_node_events;
 mod window_node_worlds;
@@ -2475,12 +2480,6 @@ mod window_receiver_access;
 mod worklet_interfaces;
 
 mod resource_initiator;
-
-mod history_replace_forward;
-
-mod extracted;
-mod navigation_timing_inheritance;
-mod payment_response_interfaces;
 
 mod body_mime_consolidation;
 
@@ -2491,7 +2490,6 @@ mod observer_element_arguments;
 mod report_body_interface_exposure;
 mod response_blob_mime;
 
-mod dom_rect_factory_descriptors;
 mod media_device_interfaces;
 
 mod document_range_factory_realm;
@@ -2523,6 +2521,7 @@ mod sqlite_web_storage;
 
 mod dynamic_inline_scripts;
 mod native_request_url_provenance;
+mod window_promise_method_receivers;
 mod window_restricted_accessors;
 mod window_sync_method_receivers;
 
