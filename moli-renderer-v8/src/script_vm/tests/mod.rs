@@ -2428,12 +2428,14 @@ mod svg_length_validation;
 mod svg_image_aspect_ratio_receivers;
 
 mod string_timers;
+mod svg_number_list_native_receivers;
 mod svg_number_validation;
 mod svg_root_factory_receivers;
 mod svg_switch_mpath_interfaces;
 mod svg_value_factories;
 
 mod idb_cursor_native_receivers;
+mod idb_index_native_receivers;
 
 mod text_encoder_utf16_progress;
 mod time_ranges;
@@ -2456,11 +2458,9 @@ mod websocket;
 mod websocket_close_info_numbers;
 
 mod websocket_stream_dictionary;
-
 mod webtransport_stream_interface_exposure;
 
-mod idb_index_native_receivers;
-
+mod window_cross_origin_getters;
 mod window_event_receivers;
 mod window_execution_context;
 mod window_scheduling_receivers;
@@ -2527,6 +2527,7 @@ mod sqlite_web_storage;
 mod dynamic_inline_scripts;
 mod native_request_url_provenance;
 mod svg_number_list_native_receivers;
+mod webtransport_stream_interface_exposure;
 
 mod frame_owner_origin_access;
 
