@@ -444,6 +444,8 @@ impl ConnectedStyleImportRoot {
 
 #[derive(Debug, Clone)]
 pub(crate) struct ConnectedLoadNetworkResult {
+    /// Exact request Document, independent of an element's current location.
+    pub(crate) document_owner: Option<crate::frame_owner_model::FrameDocumentTaskOwner>,
     pub(crate) stylesheet_fetch: Option<crate::stylesheet_blocking::StylesheetFetch>,
     pub(crate) blocking_operation: Option<crate::stylesheet_blocking::StylesheetBlockingOperation>,
     pub(crate) source_operation: Option<Arc<ConnectedLoadOperation>>,
@@ -2712,6 +2714,7 @@ mod tests {
             .stylesheet_lifecycle
             .ready_connected_load_network_results
             .push_back(ConnectedLoadNetworkResult {
+                document_owner: None,
                 stylesheet_fetch: None,
                 blocking_operation: None,
                 source_operation: None,
@@ -2759,6 +2762,7 @@ mod tests {
             .stylesheet_lifecycle
             .ready_connected_load_network_results
             .push_back(ConnectedLoadNetworkResult {
+                document_owner: None,
                 stylesheet_fetch: Some(active_load.fetch().clone()),
                 blocking_operation: None,
                 source_operation: None,
@@ -2811,6 +2815,7 @@ mod tests {
             .stylesheet_lifecycle
             .ready_connected_load_network_results
             .push_back(ConnectedLoadNetworkResult {
+                document_owner: None,
                 stylesheet_fetch: Some(detached_load.fetch().clone()),
                 blocking_operation: None,
                 source_operation: None,
@@ -2863,6 +2868,7 @@ mod tests {
             .stylesheet_lifecycle
             .ready_connected_load_network_results
             .push_back(ConnectedLoadNetworkResult {
+                document_owner: None,
                 stylesheet_fetch: Some(detached_load.fetch().clone()),
                 blocking_operation: None,
                 source_operation: None,
@@ -3469,6 +3475,7 @@ mod tests {
             operation,
             successful: false,
             network_results: vec![ConnectedLoadNetworkResult {
+                document_owner: None,
                 stylesheet_fetch: None,
                 blocking_operation: None,
                 source_operation: None,
@@ -3563,6 +3570,7 @@ mod tests {
                 operation: first_a,
                 successful: true,
                 network_results: vec![ConnectedLoadNetworkResult {
+                    document_owner: None,
                     stylesheet_fetch: None,
                     blocking_operation: None,
                     source_operation: None,
@@ -3635,6 +3643,7 @@ mod tests {
             operation,
             successful: true,
             network_results: vec![ConnectedLoadNetworkResult {
+                document_owner: None,
                 stylesheet_fetch: None,
                 blocking_operation: None,
                 source_operation: None,
@@ -3695,6 +3704,7 @@ mod tests {
             operation: first_a,
             successful: true,
             network_results: vec![ConnectedLoadNetworkResult {
+                document_owner: None,
                 stylesheet_fetch: None,
                 blocking_operation: None,
                 source_operation: None,
@@ -3831,6 +3841,7 @@ mod tests {
             .stylesheet_lifecycle
             .ready_connected_load_network_results
             .push_back(ConnectedLoadNetworkResult {
+                document_owner: None,
                 stylesheet_fetch: None,
                 blocking_operation: None,
                 source_operation: None,

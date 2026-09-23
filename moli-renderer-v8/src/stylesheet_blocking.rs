@@ -40,9 +40,18 @@ pub(crate) struct RendererStylesheetFetcher {
     request_resource_type: moli_fetch::RequestResourceType,
     link_preload: bool,
     csp_context: Option<crate::content_security_policy::StylesheetFetchCspContext>,
+    completion_producer: Option<crate::page_task_queue::RendererPageStylesheetTaskProducer>,
 }
 
 impl RendererStylesheetFetcher {
+    pub(crate) fn with_completion_producer(
+        mut self,
+        producer: crate::page_task_queue::RendererPageStylesheetTaskProducer,
+    ) -> Self {
+        self.completion_producer = Some(producer);
+        self
+    }
+
     pub(crate) fn resource_loader(&self) -> &crate::network::context::DocumentResourceLoader {
         &self.loader
     }
@@ -67,6 +76,7 @@ impl RendererStylesheetFetcher {
             request_resource_type: moli_fetch::RequestResourceType::CssStyleSheet,
             link_preload: false,
             csp_context: None,
+            completion_producer: None,
         }
     }
 
@@ -82,6 +92,7 @@ impl RendererStylesheetFetcher {
             request_resource_type,
             link_preload,
             csp_context: None,
+            completion_producer: None,
         }
     }
 
@@ -101,6 +112,16 @@ impl RendererStylesheetFetcher {
 }
 
 impl StylesheetFetcher for RendererStylesheetFetcher {
+    fn completion_publisher(
+        &self,
+    ) -> Option<moli_stylesheet_blocking::StylesheetCompletionPublisher> {
+        self.completion_producer.clone().map(|producer| {
+            std::sync::Arc::new(move |completion| {
+                let _ = producer.send_blocking_completion(completion);
+            }) as moli_stylesheet_blocking::StylesheetCompletionPublisher
+        })
+    }
+
     fn resource_cache_scope(&self) -> u64 {
         self.loader.identity().value()
     }
