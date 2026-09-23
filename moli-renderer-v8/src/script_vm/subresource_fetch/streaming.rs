@@ -219,6 +219,7 @@ impl ScriptVm {
                         ),
                         response_from_cache: response.from_cache,
                         response_cache_state: response.cache_state,
+                        response_preload_state: response.preload_state.clone(),
                     };
                     trace_async_subresource_stage(
                         "async_subresource_complete_running_auth_required",
@@ -280,6 +281,7 @@ impl ScriptVm {
                         ),
                         from_cache: response.from_cache,
                         cache_state: response.cache_state,
+                        preload_state: response.preload_state.clone(),
                     };
                     self._context_host
                         .borrow_mut()

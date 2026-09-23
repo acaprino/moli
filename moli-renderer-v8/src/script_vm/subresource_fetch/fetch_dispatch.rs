@@ -441,12 +441,21 @@ impl ScriptVm {
         completion_result: AsyncSubresourceFetchResult,
         mut supplied_network_record: Option<crate::types::SubresourceNetworkRecord>,
     ) -> Result<AsyncSubresourceFetchBodyActivity> {
+        let consumed_preload = match &completion_result {
+            AsyncSubresourceFetchResult::PreloadFailure(_) => true,
+            AsyncSubresourceFetchResult::Response(response)
+            | AsyncSubresourceFetchResult::Image { response, .. } => {
+                response.preload_state.is_consumed()
+            }
+            AsyncSubresourceFetchResult::Failure(_) => false,
+        };
         let (supplied_parkable_image, result) = match completion_result {
             AsyncSubresourceFetchResult::Response(response) => (None, Ok(response)),
             AsyncSubresourceFetchResult::Image { response, encoded } => {
                 (Some(encoded), Ok(response))
             }
-            AsyncSubresourceFetchResult::Failure(error) => (None, Err(error)),
+            AsyncSubresourceFetchResult::Failure(error)
+            | AsyncSubresourceFetchResult::PreloadFailure(error) => (None, Err(error)),
         };
         let response_filter = response_filter.or_else(|| {
             (!skip_fetch_security_validation
@@ -1017,7 +1026,7 @@ impl ScriptVm {
                             sequence,
                             pending.info.internal_id,
                             &pending.info.url,
-                            ImageSubresourceTerminal::Failure,
+                            if consumed_preload { ImageSubresourceTerminal::PreloadFailure } else { ImageSubresourceTerminal::Failure },
                         ),
                         PendingSubresourceContinuation::Media {
                             media_handle,

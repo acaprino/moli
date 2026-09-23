@@ -1262,6 +1262,8 @@ fn child_document_load_outcome_from_response(
         response_body: Some(response_body.clone()),
         from_cache: head.from_cache,
         cache_state: head.cache_state,
+
+        preload_state: head.preload_state.clone(),
     };
     if child_document_response_should_ignore_navigation(head.status, &head.headers) {
         return Ok(ChildDocumentLoadOutcome::IgnoredNavigation(Box::new(
@@ -1457,6 +1459,7 @@ mod tests {
                 redirect_chain: Vec::new(),
                 from_cache: false,
                 cache_state: Default::default(),
+                preload_state: Default::default(),
                 negotiated_http_version: None,
             },
             moli_fetch::ResponseBody::materialized_bytes(body_bytes.clone()),
