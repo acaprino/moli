@@ -3788,6 +3788,8 @@ fn child_navigation_load_is_exact_and_replacement_owned() {
         .replace_current_child_navigation_load(child_handle)
         .expect("navigation acceptance should acquire an exact delay");
     assert_eq!(first.owner(), owner);
+    assert!(store.claim_current_child_navigation_beforeunload(child_handle, first));
+    assert!(!store.claim_current_child_navigation_beforeunload(child_handle, first));
     assert_eq!(
         store.current_child_navigation_load(child_handle),
         Some(first)
@@ -3812,6 +3814,8 @@ fn child_navigation_load_is_exact_and_replacement_owned() {
         .replace_current_child_navigation_load(child_handle)
         .expect("a newer navigation should replace the old delay identity");
     assert_ne!(first, second);
+    assert!(!store.claim_current_child_navigation_beforeunload(child_handle, first));
+    assert!(store.claim_current_child_navigation_beforeunload(child_handle, second));
     assert_eq!(
         store.settle_current_child_navigation_load(child_handle, first),
         None,
@@ -3826,6 +3830,7 @@ fn child_navigation_load_is_exact_and_replacement_owned() {
         Some(owner)
     );
     assert_eq!(store.current_child_navigation_load(child_handle), None);
+    assert!(!store.claim_current_child_navigation_beforeunload(child_handle, second));
     let complete = store
         .prepare_current_child_document_complete_transition(child_handle, owner)
         .expect("exact terminal should make complete claimable again");
