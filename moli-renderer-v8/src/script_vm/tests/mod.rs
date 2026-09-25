@@ -2531,6 +2531,7 @@ mod dynamic_inline_scripts;
 mod native_request_url_provenance;
 mod window_promise_method_receivers;
 mod window_restricted_accessors;
+mod window_scroll_methods;
 mod window_sync_method_receivers;
 
 mod frame_owner_origin_access;
