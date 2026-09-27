@@ -4002,7 +4002,7 @@ impl FrameOwnerStore {
         current_script: Option<DomHandle>,
         script_url: Url,
         script_base_url: Url,
-        script_nonce: Option<String>,
+        script_fetch_metadata: Option<crate::planning::ScriptFetchMetadata>,
         source: String,
     ) -> Option<FrameScriptJob> {
         if !matches!(
@@ -4019,7 +4019,7 @@ impl FrameOwnerStore {
             current_script,
             Some(script_url),
             Some(script_base_url),
-            script_nonce,
+            script_fetch_metadata,
             FrameScriptSource::SourceText(source),
         )
     }
@@ -4108,7 +4108,7 @@ impl FrameOwnerStore {
         current_script: Option<DomHandle>,
         script_url: Url,
         script_base_url: Url,
-        script_nonce: Option<String>,
+        script_fetch_metadata: Option<crate::planning::ScriptFetchMetadata>,
         source: String,
     ) -> Option<FrameScriptJob> {
         let owner = self.current_child_owner_snapshot(child_handle)?;
@@ -4123,7 +4123,7 @@ impl FrameOwnerStore {
             current_script,
             script_url,
             script_base_url,
-            script_nonce,
+            script_fetch_metadata,
             source,
         )
     }
@@ -4157,6 +4157,7 @@ impl FrameOwnerStore {
         current_script: Option<DomHandle>,
         script_url: Url,
         script_base_url: Url,
+        script_fetch_metadata: crate::planning::ScriptFetchMetadata,
         source: String,
     ) -> Option<FrameScriptJob> {
         let owner = self.current_child_owner_snapshot(child_handle)?;
@@ -4171,7 +4172,7 @@ impl FrameOwnerStore {
             current_script,
             script_url,
             script_base_url,
-            None,
+            Some(script_fetch_metadata),
             source,
         )
     }
@@ -4242,7 +4243,7 @@ impl FrameOwnerStore {
         current_script: Option<DomHandle>,
         script_url: Option<Url>,
         script_base_url: Option<Url>,
-        script_nonce: Option<String>,
+        script_fetch_metadata: Option<crate::planning::ScriptFetchMetadata>,
         source: FrameScriptSource,
     ) -> Option<FrameScriptJob> {
         let owner = self.current_frame_owner_snapshot(frame_id)?;
@@ -4255,8 +4256,7 @@ impl FrameOwnerStore {
             source,
             script_url: script_url.unwrap_or_else(|| owner.document_url.clone()),
             base_url: script_base_url.unwrap_or(owner.document_base_url),
-            script_nonce,
-            script_integrity: None,
+            script_fetch_metadata,
             #[cfg(test)]
             credentials_mode: owner.settings.credentials_mode,
             referrer_policy: owner.settings.referrer_policy,
@@ -4272,7 +4272,7 @@ impl FrameOwnerStore {
         current_script: Option<DomHandle>,
         script_url: Url,
         script_base_url: Url,
-        script_nonce: Option<String>,
+        script_fetch_metadata: Option<crate::planning::ScriptFetchMetadata>,
         source: String,
     ) -> Option<FrameScriptJob> {
         if !matches!(
@@ -4296,8 +4296,7 @@ impl FrameOwnerStore {
             source: FrameScriptSource::SourceText(source),
             script_url,
             base_url: script_base_url,
-            script_nonce,
-            script_integrity: None,
+            script_fetch_metadata,
             #[cfg(test)]
             credentials_mode: owner.settings.credentials_mode,
             referrer_policy: owner.settings.referrer_policy,
