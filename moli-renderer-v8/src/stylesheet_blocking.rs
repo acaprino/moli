@@ -41,9 +41,15 @@ pub(crate) struct RendererStylesheetFetcher {
     link_preload: bool,
     csp_context: Option<crate::content_security_policy::StylesheetFetchCspContext>,
     completion_producer: Option<crate::page_task_queue::RendererPageStylesheetTaskProducer>,
+    document_referrer_policy: Option<String>,
 }
 
 impl RendererStylesheetFetcher {
+    pub(crate) fn with_document_referrer_policy(mut self, policy: Option<String>) -> Self {
+        self.document_referrer_policy = policy;
+        self
+    }
+
     pub(crate) fn with_completion_producer(
         mut self,
         producer: crate::page_task_queue::RendererPageStylesheetTaskProducer,
@@ -77,6 +83,7 @@ impl RendererStylesheetFetcher {
             link_preload: false,
             csp_context: None,
             completion_producer: None,
+            document_referrer_policy: None,
         }
     }
 
@@ -93,6 +100,7 @@ impl RendererStylesheetFetcher {
             link_preload,
             csp_context: None,
             completion_producer: None,
+            document_referrer_policy: None,
         }
     }
 
@@ -112,6 +120,17 @@ impl RendererStylesheetFetcher {
 }
 
 impl StylesheetFetcher for RendererStylesheetFetcher {
+    fn prepare_stylesheet_fetch_options(
+        &self,
+        options: StylesheetFetchOptions,
+    ) -> StylesheetFetchOptions {
+        if options.document_referrer_policy().is_some() {
+            options
+        } else {
+            options.with_document_referrer_policy(self.document_referrer_policy.clone())
+        }
+    }
+
     fn completion_publisher(
         &self,
     ) -> Option<moli_stylesheet_blocking::StylesheetCompletionPublisher> {
@@ -136,6 +155,7 @@ impl StylesheetFetcher for RendererStylesheetFetcher {
         url: Url,
         options: StylesheetFetchOptions,
     ) -> moli_stylesheet_blocking::PreparedStylesheetFetch {
+        let options = self.prepare_stylesheet_fetch_options(options);
         let request_origin = self.loader.fetch_context().request_origin();
         let request = stylesheet_readiness_request(
             &document_url,
@@ -412,7 +432,7 @@ pub(crate) fn apply_stylesheet_request_parameters(
         .with_browser_request_metadata(moli_fetch::BrowserRequestMetadata::Style)
         .with_subresource_request_metadata(moli_fetch::SubresourceRequestMetadata {
             referrer_policy: options.referrer_policy().map(str::to_owned),
-            document_referrer_policy: None,
+            document_referrer_policy: options.document_referrer_policy().map(str::to_owned),
             integrity: options.integrity().map(str::to_owned),
         })
 }
