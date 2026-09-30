@@ -2546,6 +2546,8 @@ mod window_restricted_accessors;
 mod window_scroll_methods;
 mod window_sync_method_receivers;
 
+mod worklet_interfaces;
+
 mod frame_owner_origin_access;
 
 async fn drain_content_security_policy_violation_tasks_for_test(
