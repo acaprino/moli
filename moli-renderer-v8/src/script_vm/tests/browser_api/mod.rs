@@ -50,6 +50,7 @@ mod idle_callbacks;
 mod idle_detection;
 mod images;
 mod input_event_init;
+mod keyboard_event_init;
 mod legacy_event_init;
 mod location_entry_settings;
 mod media;
@@ -129,7 +130,6 @@ mod worker_listener_invocation;
 mod worker_options;
 
 mod error_event_init;
-mod keyboard_event_init;
 mod window_current_event_private;
 
 mod video_codec_support;
