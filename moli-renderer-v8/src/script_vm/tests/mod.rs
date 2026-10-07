@@ -2567,6 +2567,8 @@ mod svg_hyperlinks;
 mod svg_transform_lists;
 mod svg_value_lists;
 
+mod path2d_native;
+
 mod frame_owner_origin_access;
 
 async fn drain_content_security_policy_violation_tasks_for_test(

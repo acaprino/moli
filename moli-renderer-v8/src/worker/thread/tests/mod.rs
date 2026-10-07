@@ -1630,6 +1630,7 @@ mod payment_events;
 
 mod performance_handler_order;
 
+mod path2d_native;
 mod performance_user_timing;
 
 mod abort_controller_receivers;
