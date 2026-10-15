@@ -1018,7 +1018,7 @@ impl ScriptVm {
                         *media_handle,
                         *sequence,
                         started.internal_id,
-                        false,
+                        MediaSubresourceTerminal::Failure,
                     ),
                     PendingSubresourceContinuation::TextTrack {
                         track_handle,
@@ -1270,7 +1270,9 @@ impl ScriptVm {
                     *media_handle,
                     *sequence,
                     started.internal_id,
-                    crate::network_host::media_response_status_is_successful(started.head.status),
+                    // Production media transport is buffered. Headers alone
+                    // cannot establish that a decoded video frame is ready.
+                    MediaSubresourceTerminal::Failure,
                 ),
                 PendingSubresourceContinuation::TextTrack {
                     track_handle,
