@@ -101,6 +101,11 @@ pub struct Request {
     redirect_policy: Option<RequestRedirectPolicy>,
     upload_observer: Option<crate::UploadObserver>,
     redirect_check: Option<RequestRedirectCheck>,
+    pub(crate) compression_dictionary: Option<Arc<crate::compression_dictionary::Dictionary>>,
+    pub(crate) compression_dictionary_store:
+        Option<crate::compression_dictionary::SharedDictionaryStore>,
+    pub(crate) compression_dictionary_snapshot:
+        Option<crate::compression_dictionary::DictionaryRequestSnapshot>,
 }
 
 /// Request-owned admission check, run before following each redirect target.
@@ -225,6 +230,7 @@ pub enum BrowserRequestMetadata {
     Audio,
     AudioWorklet,
     Beacon,
+    Dictionary,
     EventSource,
     Fetch,
     Font,
@@ -260,7 +266,12 @@ impl BrowserRequestMetadata {
             Self::Style | Self::StyleModule => "style",
             Self::TextTrack => "track",
             Self::Video => "video",
-            Self::Beacon | Self::EventSource | Self::Fetch | Self::Ping | Self::Xhr => "empty",
+            Self::Beacon
+            | Self::Dictionary
+            | Self::EventSource
+            | Self::Fetch
+            | Self::Ping
+            | Self::Xhr => "empty",
         }
     }
 }
@@ -698,6 +709,9 @@ impl Request {
             redirect_policy: None,
             upload_observer: None,
             redirect_check: None,
+            compression_dictionary: None,
+            compression_dictionary_store: None,
+            compression_dictionary_snapshot: None,
         })
     }
 
@@ -737,6 +751,9 @@ impl Request {
             redirect_policy: None,
             upload_observer: None,
             redirect_check: None,
+            compression_dictionary: None,
+            compression_dictionary_store: None,
+            compression_dictionary_snapshot: None,
         }
     }
 
@@ -809,6 +826,9 @@ impl Request {
             redirect_policy: None,
             upload_observer: None,
             redirect_check: None,
+            compression_dictionary: None,
+            compression_dictionary_store: None,
+            compression_dictionary_snapshot: None,
         }
     }
 
