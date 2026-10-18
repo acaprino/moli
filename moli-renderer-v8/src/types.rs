@@ -1056,6 +1056,10 @@ pub(crate) enum AsyncSubresourceFetchEventTarget {
     /// The violation carries its source Document's reporting authority and
     /// remains reportable after the originating fetch has settled or aborted.
     ContentSecurityPolicyViolation,
+    ResponseLinks {
+        owner: crate::native_bridge::WindowDocumentOwner,
+        loader: crate::network::context::DocumentResourceLoaderIdentity,
+    },
     Upload {
         internal_id: u64,
     },
@@ -1100,6 +1104,7 @@ pub(super) enum AsyncSubresourceFetchEvent {
     },
     Completion(Box<AsyncSubresourceFetchCompletion>),
     ObservedNetworkRecord(Box<SubresourceNetworkRecord>),
+    ResponseLinks(Box<crate::response_links::SubresourceResponseLinks>),
     StreamingStarted(Box<AsyncSubresourceStreamingStarted>),
     StreamingChunk(AsyncSubresourceStreamingChunk),
     StreamingFinished(AsyncSubresourceStreamingFinished),
@@ -1136,6 +1141,10 @@ impl AsyncSubresourceFetchEvent {
                     body_source_id: started.body_source_id,
                 }
             }
+            Self::ResponseLinks(links) => AsyncSubresourceFetchEventTarget::ResponseLinks {
+                owner: links.owner,
+                loader: links.loader,
+            },
             Self::StreamingStarted(started) => AsyncSubresourceFetchEventTarget::StreamingStart {
                 internal_id: started.internal_id,
                 body_source_id: started.body_source_id,
