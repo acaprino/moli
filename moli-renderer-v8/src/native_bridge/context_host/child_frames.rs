@@ -104,6 +104,7 @@ pub(super) struct PendingChildFrameNavigation {
     pub(super) initiator_url: Option<Url>,
     pub(super) initiator: ChildDocumentNavigationInitiator,
     pub(super) target_snapshot: ChildNavigationTargetSnapshot,
+    pub(super) source_policy: Option<crate::runtime::RendererNavigationPolicy>,
 }
 
 impl PendingChildFrameNavigation {
@@ -118,7 +119,16 @@ impl PendingChildFrameNavigation {
             initiator_url,
             initiator,
             target_snapshot,
+            source_policy: None,
         }
+    }
+
+    pub(super) fn with_source_policy(
+        mut self,
+        policy: Option<crate::runtime::RendererNavigationPolicy>,
+    ) -> Self {
+        self.source_policy = policy;
+        self
     }
 }
 
