@@ -1203,7 +1203,10 @@ impl ChildDocumentFetch {
             head,
             body,
             navigation_url,
-            Some(&self.timing_origin),
+            ChildDocumentTiming {
+                origin: Some(&self.timing_origin),
+                response: self.resource_loader.response_timing(),
+            },
             &self.encoding_context,
         )
         .map(Some)
@@ -1260,6 +1263,11 @@ impl ChildDocumentFetch {
     }
 }
 
+struct ChildDocumentTiming<'a> {
+    origin: Option<&'a moli_url::WebOrigin>,
+    response: moli_fetch::FetchResponseTiming,
+}
+
 fn child_document_load_outcome_from_response(
     request_url: String,
     request_method: String,
@@ -1267,7 +1275,7 @@ fn child_document_load_outcome_from_response(
     head: moli_fetch::ResponseHead,
     body: moli_fetch::ResponseBody,
     navigation_url: url::Url,
-    timing_origin: Option<&moli_url::WebOrigin>,
+    timing: ChildDocumentTiming<'_>,
     encoding_context: &super::encoding::ChildDocumentEncodingContext,
 ) -> Result<ChildDocumentLoadOutcome, String> {
     let response_body = SubresourceResponseBody::from_bytes(
@@ -1288,8 +1296,23 @@ fn child_document_load_outcome_from_response(
         cache_state: head.cache_state,
 
         preload_state: head.preload_state.clone(),
-        resource_timing_body_visible: timing_origin
+        resource_timing_body_visible: timing
+            .origin
             .is_some_and(|origin| !head.url_list().has_cross_origin_url(origin)),
+        resource_timing_response: timing
+            .response
+            .fetch_started_at()
+            .map(|_| Box::new(timing.response)),
+        resource_timing_allowed: timing.origin.is_some_and(|origin| {
+            crate::context_bootstrap::FetchResourceTiming::timing_allowed(origin, &head)
+        }),
+        resource_timing_redirected: head
+            .redirect_chain
+            .iter()
+            .any(|hop| hop.source != moli_fetch::RedirectSource::Internal),
+        resource_timing_protocol: head
+            .negotiated_http_version
+            .filter(|_| head.cache_state != moli_fetch::ResponseCacheState::Local),
     };
     if child_document_response_should_ignore_navigation(head.status, &head.headers) {
         return Ok(ChildDocumentLoadOutcome::IgnoredNavigation(Box::new(
@@ -1438,7 +1461,10 @@ mod tests {
                     head.clone(),
                     moli_fetch::ResponseBody::materialized_bytes(b"body".to_vec()),
                     head.final_url.clone(),
-                    timing_origin,
+                    ChildDocumentTiming {
+                        origin: timing_origin,
+                        response: Default::default(),
+                    },
                     &super::super::encoding::ChildDocumentEncodingContext::default(),
                 )
                 .unwrap();
@@ -1585,7 +1611,10 @@ mod tests {
             },
             moli_fetch::ResponseBody::materialized_bytes(body_bytes.clone()),
             url::Url::parse("https://example.test/child").unwrap(),
-            None,
+            ChildDocumentTiming {
+                origin: None,
+                response: Default::default(),
+            },
             &super::super::encoding::ChildDocumentEncodingContext::default(),
         )
         .expect("child document response should load");
