@@ -765,6 +765,7 @@ impl ScriptVm {
             || matches!(
                 pending.continuation,
                 PendingSubresourceContinuation::ResponsePreload(_)
+                    | PendingSubresourceContinuation::Beacon(_)
             ))
         .then(|| {
             if !started.head.redirect_chain.is_empty()
@@ -795,12 +796,24 @@ impl ScriptVm {
         .flatten();
 
         if let Some(error_text) = security_error {
-            let activity = self.complete_response_preload(
-                &mut pending,
-                started.response_filter.as_ref(),
-                started.skip_fetch_security_validation,
-                &Err(error_text.clone()),
-            )?;
+            let activity = if matches!(
+                pending.continuation,
+                PendingSubresourceContinuation::Beacon(_)
+            ) {
+                self.complete_beacon_timing(
+                    &mut pending,
+                    None,
+                    started.response_filter.as_ref(),
+                    0,
+                )?
+            } else {
+                self.complete_response_preload(
+                    &mut pending,
+                    started.response_filter.as_ref(),
+                    started.skip_fetch_security_validation,
+                    &Err(error_text.clone()),
+                )?
+            };
             pending.load.cancel();
             let mut network_record = crate::types::SubresourceNetworkRecord::failure(
                 pending.info.frame_id.clone(),
@@ -1116,7 +1129,7 @@ impl ScriptVm {
                     }
                     PendingSubresourceContinuation::Dictionary(_)
                         | PendingSubresourceContinuation::ResponsePreload(_)
-                        | PendingSubresourceContinuation::Beacon
+                        | PendingSubresourceContinuation::Beacon(_)
                     | PendingSubresourceContinuation::CspReport { .. }
                     | PendingSubresourceContinuation::WebSocket(_)
                     | PendingSubresourceContinuation::ChildDocument(_)
@@ -1425,7 +1438,7 @@ impl ScriptVm {
                 }
                 PendingSubresourceContinuation::Dictionary(_)
                         | PendingSubresourceContinuation::ResponsePreload(_)
-                        | PendingSubresourceContinuation::Beacon
+                        | PendingSubresourceContinuation::Beacon(_)
                 | PendingSubresourceContinuation::CspReport { .. }
                 | PendingSubresourceContinuation::Xhr { .. }
                 | PendingSubresourceContinuation::WebSocket(_)
@@ -1738,6 +1751,16 @@ impl ScriptVm {
             }
         });
         let activity = if matches!(
+            streaming.pending.continuation,
+            PendingSubresourceContinuation::Beacon(_)
+        ) {
+            self.complete_beacon_timing(
+                &mut streaming.pending,
+                Some(&streaming.head),
+                streaming.response_filter.as_ref(),
+                response_body.len(),
+            )?
+        } else if matches!(
             streaming.pending.continuation,
             PendingSubresourceContinuation::ResponsePreload(_)
         ) {
