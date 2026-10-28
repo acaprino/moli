@@ -817,7 +817,10 @@ impl PageScriptHost {
                     self.set_custom_element_registry_association(
                         document_handle,
                         CustomElementRegistryAssociation::Registry(
-                            CustomElementRegistryKey::Child(handle),
+                            CustomElementRegistryKey::Child(
+                                self.custom_element_registry_owner_id(),
+                                handle,
+                            ),
                         ),
                     );
                 }
@@ -1063,6 +1066,7 @@ impl PageScriptHost {
                 self.set_custom_element_registry_association(
                     document_handle,
                     CustomElementRegistryAssociation::Registry(CustomElementRegistryKey::Child(
+                        self.custom_element_registry_owner_id(),
                         handle,
                     )),
                 );
@@ -1167,6 +1171,7 @@ impl PageScriptHost {
                 self.set_custom_element_registry_association(
                     document_handle,
                     CustomElementRegistryAssociation::Registry(CustomElementRegistryKey::Child(
+                        self.custom_element_registry_owner_id(),
                         handle,
                     )),
                 );
