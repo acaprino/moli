@@ -128,6 +128,7 @@ impl PageScriptHost {
     ) -> Option<u64> {
         let PendingChildFrameNavigation {
             bootstrap,
+            blob_resource,
             initiator,
             initiator_url,
             target_snapshot,
@@ -223,6 +224,7 @@ impl PageScriptHost {
         }
         let fetch =
             ChildDocumentFetch {
+                blob_resource,
                 target_snapshot: target_snapshot.clone(),
                 timing_origin: initiating_loader.fetch_context().request_origin(),
                 target,
@@ -1068,6 +1070,7 @@ const UNSUPPORTED_CHILD_DOCUMENT_BOOTSTRAP: &str =
 /// Fetch can hold it. Every outcome reaches the navigation as a load
 /// completion.
 pub(crate) struct ChildDocumentFetch {
+    blob_resource: Option<crate::RendererBlobUrlResource>,
     source_policy: Option<crate::runtime::RendererNavigationPolicy>,
     target_snapshot: ChildNavigationTargetSnapshot,
     timing_origin: moli_url::WebOrigin,
@@ -1167,6 +1170,11 @@ impl ChildDocumentFetch {
                 .as_ref()
                 .map(|request| (client_id, request.request().clone()))
         });
+        let blob_request = self.request.as_ref().and_then(|request| {
+            self.blob_resource
+                .as_ref()
+                .map(|resource| (resource.clone(), request.request().clone()))
+        });
         let runtime = self.browser_context_runtime.clone();
         let loader = self.resource_loader.clone();
         let completion_tx = self.completion_tx.clone();
@@ -1176,6 +1184,17 @@ impl ChildDocumentFetch {
         Box::pin(async move {
             let response =
                 response.ok_or_else(|| UNSUPPORTED_CHILD_DOCUMENT_BOOTSTRAP.to_owned())?;
+            if let Some((resource, request)) = blob_request
+                && let Some(response) = resource
+                    .response(
+                        &request.url,
+                        &request.method,
+                        &request.request_headers.to_byte_strings(),
+                    )
+                    .await
+            {
+                return response.map(Into::into).map_err(|error| error.to_string());
+            }
             if let Some((client_id, request)) = service_worker_request
                 && let Some(response) = runtime
                     .fetch_service_worker_child_main_resource_for_reserved_client(
