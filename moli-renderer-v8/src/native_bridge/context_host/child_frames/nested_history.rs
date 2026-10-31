@@ -257,6 +257,7 @@ impl PageScriptHost {
             record.seed,
             None,
             None,
+            Some(OwnerDispatchScope::Child(handle)),
         );
     }
 
