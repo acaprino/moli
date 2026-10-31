@@ -1574,7 +1574,6 @@ mod onerror;
 mod performance_observer_contract;
 mod performance_resource_timing;
 mod postmessage;
-mod stream_clone_failures;
 mod synthetic_exceptions;
 mod tls;
 mod trusted_types_reporting;
