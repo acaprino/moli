@@ -3946,6 +3946,7 @@ dependencies = [
 name = "moli-v8-init"
 version = "0.1.0"
 dependencies = [
+ "libc",
  "v8",
 ]
 
