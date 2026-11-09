@@ -50,6 +50,13 @@ impl PageScriptHost {
                             )
                         }),
                 )
+                .with_document_character_set(
+                    self.child_browsing_context_document_handle(child_handle)
+                        .and_then(|document| {
+                            self.dom_host().document_character_set_for_handle(document)
+                        })
+                        .map(str::to_owned),
+                )
             });
         let mut accepted = 0;
         for input in inputs {
@@ -276,7 +283,9 @@ impl PageScriptHost {
                 continue;
             };
             for resource in crate::css_resource_urls::stylesheet_load_blocking_font_resources(
-                response.body_text(),
+                terminal
+                    .stylesheet_text()
+                    .expect("ready CSS has decoded text"),
                 &response.final_url,
                 optional_resource_fetch_mask,
             ) {
@@ -407,9 +416,7 @@ impl PageScriptHost {
             if terminal.failed_integrity() {
                 return;
             }
-            let text = terminal
-                .ready_response()
-                .map_or("", |response| response.body_text());
+            let text = terminal.stylesheet_text().unwrap_or_default();
             let base_url = match terminal.physical() {
                 crate::stylesheet_blocking::StylesheetPhysicalOutcome::Response(response) => {
                     response.final_url.clone()
