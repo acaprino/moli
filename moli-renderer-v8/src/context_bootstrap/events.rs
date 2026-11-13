@@ -438,7 +438,7 @@ pub(super) fn clipboard_event_clipboard_data_getter_function<'s>(
         throw_type_error(scope, "Illegal invocation");
         return;
     }
-    let value = get_private_value(scope, args.this(), CLIPBOARD_EVENT_CLIPBOARD_DATA_SLOT)
+    let value = super::event_private_value(scope, args.this(), CLIPBOARD_EVENT_CLIPBOARD_DATA_SLOT)
         .unwrap_or_else(|| v8::null(scope).into());
     rv.set(value);
 }
@@ -452,7 +452,8 @@ pub(super) fn clipboard_change_event_types_getter_function<'s>(
         throw_type_error(scope, "Illegal invocation");
         return;
     }
-    let Some(value) = get_private_value(scope, args.this(), CLIPBOARD_CHANGE_EVENT_TYPES_SLOT)
+    let Some(value) =
+        super::event_private_value(scope, args.this(), CLIPBOARD_CHANGE_EVENT_TYPES_SLOT)
     else {
         throw_type_error(scope, "Illegal invocation");
         return;
@@ -469,7 +470,8 @@ pub(super) fn clipboard_change_event_change_id_getter_function<'s>(
         throw_type_error(scope, "Illegal invocation");
         return;
     }
-    let Some(value) = get_private_value(scope, args.this(), CLIPBOARD_CHANGE_EVENT_CHANGE_ID_SLOT)
+    let Some(value) =
+        super::event_private_value(scope, args.this(), CLIPBOARD_CHANGE_EVENT_CHANGE_ID_SLOT)
     else {
         throw_type_error(scope, "Illegal invocation");
         return;

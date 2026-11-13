@@ -5,6 +5,7 @@ use super::super::{
 use super::{
     ChildDocumentNavigationInitiator, PendingChildDocumentNavigation,
     configure_child_document_navigation_request,
+    frame_owner_resource_timing::PendingFrameOwnerResourceTiming,
     snapshots::child_document_content_type_from_headers,
 };
 #[cfg(test)]
@@ -217,6 +218,10 @@ impl PageScriptHost {
             initiator,
             target_snapshot.resource_timing_initiator().clone(),
         );
+        let timing_origin = frame_owner_resource_timing.as_ref().map_or_else(
+            || initiating_loader.fetch_context().request_origin(),
+            PendingFrameOwnerResourceTiming::request_origin,
+        );
         let initiator_url =
             initiator_url.unwrap_or_else(|| self.document_url_for_child_context(handle));
         let browser_context = self.host_document().cookie_browser_context();
@@ -245,7 +250,7 @@ impl PageScriptHost {
             ChildDocumentFetch {
                 blob_resource,
                 target_snapshot: target_snapshot.clone(),
-                timing_origin: initiating_loader.fetch_context().request_origin(),
+                timing_origin,
                 target,
                 network_attribution,
                 network_info: None,
@@ -577,7 +582,6 @@ impl PageScriptHost {
         };
         let (result, object_fallback_required) = if object_attribute_navigation {
             match result {
-                Ok(redirect @ ChildDocumentLoadOutcome::Redirect(_)) => (Ok(redirect), false),
                 Ok(ChildDocumentLoadOutcome::Loaded(loaded)) => {
                     let failed_status = loaded
                         .document_network
@@ -609,6 +613,7 @@ impl PageScriptHost {
                         true,
                     )
                 }
+                Ok(redirect @ ChildDocumentLoadOutcome::Redirect(_)) => (Ok(redirect), false),
                 Err(error) => (Err(error), true),
             }
         } else {

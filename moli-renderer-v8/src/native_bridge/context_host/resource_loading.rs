@@ -820,6 +820,7 @@ impl PageScriptHost {
             None,
         )?;
         self.push_pending_subresource_fetch_info(info.clone());
+        let initial_request_url = info.url.clone();
         self.pending_subresource_fetches.insert(
             info.internal_id,
             PendingSubresourceFetchState {
@@ -833,10 +834,11 @@ impl PageScriptHost {
                 request_mode,
                 network_partition_key,
                 policy_context,
-                continuation: PendingSubresourceContinuation::Fetch(Box::new(
+                continuation: PendingSubresourceContinuation::Fetch(
                     crate::types::PendingWindowFetchContinuation::new(
                         resolver,
                         resource_timing,
+                        initial_request_url,
                         keepalive,
                         cache_mode,
                         connect_policy,
@@ -845,7 +847,7 @@ impl PageScriptHost {
                         integrity,
                     )
                     .with_intercepted_request(request),
-                )),
+                ),
                 deferred_request_started: false,
                 blob_url_entry,
             },
@@ -1130,6 +1132,7 @@ impl PageScriptHost {
         if !defer_request_started {
             self.record_pending_subresource_request_started(&info, load.disposition());
         }
+        let initial_request_url = info.url.clone();
         self.pending_subresource_fetches.insert(
             internal_id,
             PendingSubresourceFetchState {
@@ -1147,6 +1150,7 @@ impl PageScriptHost {
                     crate::types::PendingWindowFetchContinuation::new(
                         resolver,
                         resource_timing,
+                        initial_request_url,
                         keepalive,
                         cache_mode,
                         connect_policy,
@@ -1183,6 +1187,7 @@ impl PageScriptHost {
             execution_context.dispatch_scope(),
         )
         .expect("active Document authority required for EventSource CSP");
+        csp.redirect_state.record_checked_url(&info.url, false);
         self.assign_pending_subresource_fetch_identity(&mut info);
         let internal_id = info.internal_id;
         let request_origin = resource_loader.fetch_context().request_origin();
@@ -1924,6 +1929,7 @@ impl PageScriptHost {
             execution_context.dispatch_scope(),
         )
         .expect("active Document authority required for XHR CSP");
+        csp.redirect_state.record_checked_url(&info.url, false);
         self.assign_pending_subresource_fetch_identity(&mut info);
         let internal_id = info.internal_id;
         let (load, request_origin) = self.require_document_resource_load_for_dispatch_scope(
@@ -1989,7 +1995,7 @@ impl PageScriptHost {
                 request_mode: moli_fetch::RequestMode::Cors,
                 network_partition_key: None,
                 policy_context: Default::default(),
-                continuation: PendingSubresourceContinuation::WebSocket(Box::new(connection)),
+                continuation: PendingSubresourceContinuation::WebSocket(connection),
                 deferred_request_started: false,
                 blob_url_entry: None,
             },
@@ -2057,6 +2063,7 @@ impl PageScriptHost {
             execution_context.dispatch_scope(),
         )
         .expect("active Document authority required for XHR CSP");
+        csp.redirect_state.record_checked_url(&info.url, false);
         self.assign_pending_subresource_fetch_identity(&mut info);
         let internal_id = info.internal_id;
         let (load, request_origin) = self.require_document_resource_load_for_dispatch_scope(
@@ -2302,6 +2309,26 @@ impl PageScriptHost {
                 })
     }
 
+    pub(crate) fn window_subresource_csp_context(
+        &self,
+        internal_id: u64,
+    ) -> Option<crate::network_host::WindowCspRequestContext> {
+        let pending = self
+            .pending_subresource_fetches
+            .get(&internal_id)
+            .or_else(|| {
+                self.running_subresource_fetches
+                    .get(&internal_id)
+                    .map(|state| &state.pending)
+            })?;
+        let (policy, redirect_state, report_context) = pending.continuation.csp_request_policy()?;
+        Some(crate::network_host::WindowCspRequestContext {
+            policy: policy.clone(),
+            redirect_state: redirect_state.clone(),
+            report_context: report_context.clone(),
+        })
+    }
+
     pub(crate) fn window_fetch_redirect_check(
         &self,
         internal_id: u64,
@@ -2336,7 +2363,7 @@ impl PageScriptHost {
         let pending = self.running_subresource_fetches.get(&internal_id)?;
         let pending = &pending.pending;
         let (policy, redirect_state, report_context) = pending.continuation.csp_request_policy()?;
-        if url == &pending.info.url || redirect_state.was_checked(url) {
+        if redirect_state.was_checked(url) {
             return None;
         }
         let (reports, enforced) = policy
@@ -2361,6 +2388,7 @@ impl PageScriptHost {
                     },
                 );
         }
+        redirect_state.record_checked_url(url, error.is_some());
         error
     }
 
@@ -3001,6 +3029,12 @@ impl PageScriptHost {
             // The network owner has already accepted a complete declared body
             // or a real terminal result. Keep the stream registered so that its
             // queued completion, rather than close(), determines CDP's terminal.
+            if let Some(streaming) = self.streaming_subresource_fetches.get(&internal_id)
+                && let PendingSubresourceContinuation::EventSource(request) =
+                    &streaming.pending.continuation
+            {
+                request.timing.response_aborted(true);
+            }
             return true;
         }
         let entry = self
@@ -4035,6 +4069,7 @@ impl PageScriptHost {
             .remove(&info.internal_id)
         {
             self.record_pending_subresource_response(PendingSubresourceResponseState {
+                body_is_null: None,
                 pending: in_flight.pending,
                 request_url: in_flight.request_url,
                 request_method: in_flight.request_method,
@@ -4058,8 +4093,8 @@ impl PageScriptHost {
                         redirect_chain: Vec::new(),
                         from_cache: info.from_cache,
                         cache_state: info.cache_state,
+                        preload_state: info.preload_state.clone(),
                         negotiated_http_version: None,
-                        preload_state: Default::default(),
                     },
                 )
                 .with_network_request_headers(info.network_request_headers.clone()),
@@ -4085,6 +4120,7 @@ impl PageScriptHost {
             .remove(&info.internal_id)
         {
             self.record_pending_subresource_auth(PendingSubresourceAuthState {
+                body_is_null: None,
                 pending: in_flight.pending,
                 request_url: info.url.clone(),
                 request_method: info.method.clone(),
@@ -4110,8 +4146,8 @@ impl PageScriptHost {
                         redirect_chain: Vec::new(),
                         from_cache: info.response_from_cache,
                         cache_state: info.response_cache_state,
+                        preload_state: info.response_preload_state.clone(),
                         negotiated_http_version: None,
-                        preload_state: Default::default(),
                     },
                 )
                 .with_network_request_headers(info.network_request_headers.clone()),
@@ -4212,9 +4248,7 @@ fn cancelled_fetch_resource_timing(
     fetch.resolver()?;
     Some((
         pending.execution_context.context_global()?.clone(),
-        fetch
-            .resource_timing()
-            .failed(fetch.initial_request_url(&pending.info.url)),
+        fetch.resource_timing().failed(fetch.initial_request_url()),
     ))
 }
 

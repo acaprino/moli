@@ -119,6 +119,7 @@ pub(super) fn read_blob<'s>(
         return super::read::read_promise_in_owner(scope, data, format, context);
     };
     let bytes = bytes.to_vec();
+    let scope = &mut v8::ContextScope::new(scope, context);
     let resolver = v8::PromiseResolver::new(scope)?;
     let promise = resolver.get_promise(scope);
     let task = BlobReadTask {
@@ -129,7 +130,6 @@ pub(super) fn read_blob<'s>(
             mode,
         },
     };
-    let scope = &mut v8::ContextScope::new(scope, context);
     let _ = queue_file_reading_task(scope, FileReadingTask::Blob(task));
     Some(promise)
 }

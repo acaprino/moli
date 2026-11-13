@@ -801,8 +801,13 @@ async fn service_worker_fetch_event_preload_response_resolves_network_response()
             request_mode: moli_fetch::RequestMode::Navigate,
             body_source_id,
             response_head: moli_fetch_types::FetchResponseHead {
+                body_is_null: false,
+
                 metadata: moli_fetch_types::FetchResponseMetadata {
+                    cors_exposed_header_names: None,
+
                     request_include_credentials: false,
+
                     response_type: moli_fetch_types::FetchResponseType::Basic,
                     timing_allow_passed: true,
                     url_list: (Some(
@@ -812,7 +817,6 @@ async fn service_worker_fetch_event_preload_response_resolves_network_response()
                     .into_iter()
                     .collect(),
                     redirected: false,
-                    cors_exposed_header_names: None,
                 },
                 status: 202,
                 status_text: "Accepted".to_owned(),
@@ -925,13 +929,17 @@ async fn service_worker_fetch_event_preload_response_opaqueredirect_exposes_requ
             request_mode: moli_fetch::RequestMode::Navigate,
             body_source_id,
             response_head: moli_fetch_types::FetchResponseHead {
+                body_is_null: false,
+
                 metadata: moli_fetch_types::FetchResponseMetadata {
+                    cors_exposed_header_names: None,
+
                     request_include_credentials: false,
+
                     response_type: moli_fetch_types::FetchResponseType::OpaqueRedirect,
                     timing_allow_passed: true,
                     url_list: (Some(request_url)).into_iter().collect(),
                     redirected: false,
-                    cors_exposed_header_names: None,
                 },
                 status: 302,
                 status_text: "Found".to_owned(),
@@ -1104,8 +1112,13 @@ async fn service_worker_fetch_event_preload_response_body_errors_after_response(
             request_mode: moli_fetch::RequestMode::Navigate,
             body_source_id,
             response_head: moli_fetch_types::FetchResponseHead {
+                body_is_null: false,
+
                 metadata: moli_fetch_types::FetchResponseMetadata {
+                    cors_exposed_header_names: None,
+
                     request_include_credentials: false,
+
                     response_type: moli_fetch_types::FetchResponseType::Basic,
                     timing_allow_passed: true,
                     url_list: (Some(
@@ -1115,7 +1128,6 @@ async fn service_worker_fetch_event_preload_response_body_errors_after_response(
                     .into_iter()
                     .collect(),
                     redirected: false,
-                    cors_exposed_header_names: None,
                 },
                 status: 202,
                 status_text: "Accepted".to_owned(),
@@ -1227,8 +1239,13 @@ async fn service_worker_fetch_event_preload_response_body_completes_after_fetch_
             request_mode: moli_fetch::RequestMode::Navigate,
             body_source_id,
             response_head: moli_fetch_types::FetchResponseHead {
+                body_is_null: false,
+
                 metadata: moli_fetch_types::FetchResponseMetadata {
+                    cors_exposed_header_names: None,
+
                     request_include_credentials: false,
+
                     response_type: moli_fetch_types::FetchResponseType::Basic,
                     timing_allow_passed: true,
                     url_list: (Some(
@@ -1238,7 +1255,6 @@ async fn service_worker_fetch_event_preload_response_body_completes_after_fetch_
                     .into_iter()
                     .collect(),
                     redirected: false,
-                    cors_exposed_header_names: None,
                 },
                 status: 200,
                 status_text: "OK".to_owned(),

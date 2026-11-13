@@ -17,9 +17,9 @@
       const secondReader = method === 'stream' ? second.getReader() : null;
       const firstValue = firstReader ? (await firstReader.read()).value : await first;
       const secondValue = secondReader ? (await secondReader.read()).value : await second;
-      const resultRealm = method === 'stream' ? owner : callee;
-      const expectedPrototype = method === 'stream' ? owner.ReadableStream.prototype : callee.Promise.prototype;
-      check(`${kind}/${method}/stream uses Blob realm and promises use method realm`,
+      const resultRealm = owner;
+      const expectedPrototype = method === 'stream' ? owner.ReadableStream.prototype : owner.Promise.prototype;
+      check(`${kind}/${method}/stream and promises use Blob realm`,
         Object.getPrototypeOf(first) === expectedPrototype && Object.getPrototypeOf(second) === expectedPrototype);
       if (method === 'text') {
         check(`${kind}/${method}/UTF-8 decoding`, firstValue === text && secondValue === text, [firstValue, secondValue]);
@@ -78,7 +78,7 @@
       canceled.releaseLock();
     }
 
-    const native = {Promise: callee.Promise, ArrayBuffer: owner.ArrayBuffer, Uint8Array: owner.Uint8Array,
+    const native = {Promise: owner.Promise, ArrayBuffer: owner.ArrayBuffer, Uint8Array: owner.Uint8Array,
       ReadableStream: owner.ReadableStream};
     const methods = Object.fromEntries(['text', 'arrayBuffer', 'bytes', 'stream'].map(name => [name, callee.Blob.prototype[name]]));
     const sources = [['Blob', source('Blob')], ['File', source('File')]];
@@ -127,11 +127,11 @@
     const value = methods[method].call(source);
     const reader = method === 'stream' ? value.getReader() : null;
     const result = reader ? (await reader.read()).value : await value;
-    checks.push({name: `detached-callee/${kind}/${method}/stream uses Blob realm and promises retain method realm`, passed:
-      Object.getPrototypeOf(value) === (reader ? ReadableStream.prototype : detached.Promise.prototype)});
+    checks.push({name: `detached-callee/${kind}/${method}/stream and promises retain Blob realm`, passed:
+      Object.getPrototypeOf(value) === (reader ? ReadableStream.prototype : Promise.prototype)
+        && (reader !== null || Object.getPrototypeOf(value) !== detached.Promise.prototype)});
     const text = method === 'text' ? result : new TextDecoder().decode(result);
-    const expected = reader ? Uint8Array.prototype : method === 'arrayBuffer'
-      ? detached.ArrayBuffer.prototype : detached.Uint8Array.prototype;
+    const expected = method === 'arrayBuffer' ? ArrayBuffer.prototype : Uint8Array.prototype;
     checks.push({name: `detached-callee/${kind}/${method}/read completes`, passed: text === 'live'
       && (method === 'text' || Object.getPrototypeOf(result) === expected), detail: text});
     if (reader) reader.releaseLock();

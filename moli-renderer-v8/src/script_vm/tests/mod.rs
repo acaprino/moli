@@ -426,6 +426,7 @@ fn register_pending_window_fetch_for_test(
             }
             PendingWindowFetchTestStage::Auth => {
                 host.record_pending_subresource_auth(crate::types::PendingSubresourceAuthState {
+                    body_is_null: None,
                     pending,
                     request_url: url.clone(),
                     request_method: "GET".to_owned(),
@@ -448,6 +449,7 @@ fn register_pending_window_fetch_for_test(
             PendingWindowFetchTestStage::Response => {
                 host.record_pending_subresource_response(
                     crate::types::PendingSubresourceResponseState {
+                        body_is_null: None,
                         pending,
                         request_url: url.clone(),
                         request_method: "GET".to_owned(),

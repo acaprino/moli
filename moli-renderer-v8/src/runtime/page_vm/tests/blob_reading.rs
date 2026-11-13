@@ -217,7 +217,7 @@ for (const name of ['text', 'arrayBuffer', 'bytes', 'stream']) {{
     const bytes = name === 'stream' ? result.value : result;
     const text = name === 'text' ? bytes : new TextDecoder().decode(bytes);
     outcomes.push([name, text === 'read',
-      name === 'stream' ? value instanceof owner.ReadableStream : value instanceof Promise]);
+      name === 'stream' ? value instanceof owner.ReadableStream : value instanceof owner.Promise]);
   }});
 }}
 const reader = new owner.FileReader();
