@@ -488,8 +488,12 @@ impl ControlledXhrLoad {
             use super::response_hop::{
                 SubresourceResponseTransition, advance_subresource_response,
             };
-            let transition =
-                advance_subresource_response(&mut self.request, response.head.clone(), false)?;
+            let transition = advance_subresource_response(
+                &mut self.request,
+                response.head.clone(),
+                false,
+                self.load.request_client().cors_disabled(),
+            )?;
             if let SubresourceResponseTransition::ManualResponse { .. } = transition {
                 return Err("XHR requests must follow redirects".into());
             }
@@ -504,6 +508,7 @@ impl ControlledXhrLoad {
                         .expect("XHR has a requesting origin"),
                     &response.head,
                     self.request.credentials_mode,
+                    self.load.request_client().cors_disabled(),
                 )?;
                 if !is_synthetic {
                     self.cancel.adopt_response_progress(&hop_cancel);

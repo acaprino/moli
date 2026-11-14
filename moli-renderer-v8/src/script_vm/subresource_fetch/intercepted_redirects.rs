@@ -6,6 +6,7 @@ pub(super) fn follow_intercepted_redirect(
     head: &ResponseHead,
     document_url: &Url,
     network_headers: Option<&[(String, String)]>,
+    cors_disabled: bool,
 ) -> Result<Option<(Request, RedirectInfo)>, String> {
     // A manual response does not follow Location, so even an invalid URL must
     // remain opaque. The completion path still checks the response's CORS policy.
@@ -26,7 +27,9 @@ pub(super) fn follow_intercepted_redirect(
         RequestRedirectMode::Error => return Err("fetch: redirect mode is error".to_owned()),
         RequestRedirectMode::Follow => {}
     }
-    request.validate_cors_response_for_url(&head.final_url, &head.headers)?;
+    if !cors_disabled {
+        request.validate_cors_response_for_url(&head.final_url, &head.headers)?;
+    }
     let includes_credentials = !target.username().is_empty() || target.password().is_some();
     // Like Chromium's credentialed-subresource check, allow credentials already
     // present in the same-origin embedding document. Fetch's CORS taint remains

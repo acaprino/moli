@@ -995,6 +995,7 @@ pub(in crate::worker) fn drain_worker_xhr_completion(
                         &pending.document_url,
                         &head,
                         pending.credentials_mode,
+                        pending.load.request_client().cors_disabled(),
                     );
                     apply_xhr_response_body_source(scope, xhr, head, body);
                 }
@@ -1178,6 +1179,7 @@ pub(in crate::worker) fn drain_worker_xhr_completion(
                 &pending.document_url,
                 &response_head,
                 pending.credentials_mode,
+                pending.load.request_client().cors_disabled(),
             ) {
                 Ok(()) => {
                     let response_body = pending
@@ -1212,6 +1214,7 @@ pub(in crate::worker) fn drain_worker_xhr_completion(
                                 &pending.document_url,
                                 &response_head,
                                 pending.credentials_mode,
+                                pending.load.request_client().cors_disabled(),
                             );
                             apply_xhr_response_body_source(scope, xhr, response_head, body);
                         }

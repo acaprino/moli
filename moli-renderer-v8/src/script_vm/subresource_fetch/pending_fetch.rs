@@ -1362,6 +1362,7 @@ impl ScriptVm {
                         &info.document_url,
                         &head,
                         credentials_mode,
+                        policy_context.cors_disabled,
                     )
                 };
                 match validation {
@@ -1470,6 +1471,7 @@ impl ScriptVm {
                     &info.document_url,
                     &head,
                     credentials_mode,
+                    policy_context.cors_disabled,
                 );
                 match validation {
                     Ok(()) => {
@@ -1781,6 +1783,7 @@ impl ScriptVm {
                     &pending.pending.info.document_url,
                     &response.head(),
                     pending.pending.credentials_mode,
+                    pending.pending.policy_context.cors_disabled,
                 )
                 .map(|()| response)
             };
@@ -1842,6 +1845,7 @@ impl ScriptVm {
                     &pending.pending.info.document_url,
                     &response.head(),
                     pending.pending.credentials_mode,
+                    pending.pending.policy_context.cors_disabled,
                 )
                 .map(|()| response)
             };
@@ -2083,6 +2087,7 @@ impl ScriptVm {
                     &pending.pending.info.document_url,
                     &response.head(),
                     pending.pending.credentials_mode,
+                    pending.pending.policy_context.cors_disabled,
                 )
                 .map(|()| response)
             };
@@ -2148,6 +2153,7 @@ impl ScriptVm {
                     &pending.pending.info.document_url,
                     &response.head(),
                     pending.pending.credentials_mode,
+                    pending.pending.policy_context.cors_disabled,
                 )
                 .map(|()| response)
             };
