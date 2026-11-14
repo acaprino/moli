@@ -18,7 +18,7 @@ use crate::types::{DedicatedWorkerId, SubresourcePolicyContext};
 use crate::worker::{
     WorkerGlobalKind, WorkerHandle, WorkerNetworkPolicy, WorkerPendingFetchContinue,
     WorkerPendingXhrContinue, WorkerRuntimeEvent, WorkerScriptKind, WorkerScriptSource,
-    WorkerSecureContextPolicy, WorkerSpawnOptions, spawn_worker_with_options,
+    WorkerSecureContextPolicy, WorkerSpawnOptions,
 };
 use moli_storage_key::MoliStorageKey;
 use url::Url;
@@ -163,7 +163,7 @@ impl PageScriptHost {
             .browser_context_runtime()
             .allocate_dedicated_worker_instance_id();
         self.browser_context_runtime()
-            .attach_dedicated_worker_devtools_handle(
+            .register_running_dedicated_worker_devtools_target(
                 renderer_instance_id,
                 &worker_handle,
                 self.renderer_output_journal(),
@@ -209,6 +209,11 @@ impl PageScriptHost {
         let renderer_instance_id = self
             .browser_context_runtime()
             .allocate_dedicated_worker_instance_id();
+        self.browser_context_runtime()
+            .register_loading_dedicated_worker_devtools_target(
+                renderer_instance_id,
+                self.renderer_output_journal(),
+            );
         let client_event_producer = self.dedicated_worker_client_event_producer(worker_id, &owner);
         let creator_message_security = self.window_message_source_security(owner.dispatch_scope());
         self.workers.insert(
@@ -556,18 +561,18 @@ impl PageScriptHost {
         if let Some(client_id) = reserved_service_worker_client_id {
             spawn_options = spawn_options.with_reserved_service_worker_client_id(client_id);
         }
-        let mut worker_handle = spawn_worker_with_options(spawn_options);
         let renderer_instance_id = self
             .workers
             .get(&worker_id)
             .map(|state| state.renderer_instance_id)
             .expect("loading DedicatedWorker must retain its renderer instance identity");
-        self.browser_context_runtime()
-            .attach_dedicated_worker_devtools_handle(
-                renderer_instance_id,
-                &worker_handle,
-                self.renderer_output_journal(),
-            );
+        let Some(mut worker_handle) = self
+            .browser_context_runtime()
+            .start_dedicated_worker(renderer_instance_id, spawn_options)
+        else {
+            self.forget_worker(worker_id);
+            return false;
+        };
         for message in pending_messages {
             worker_handle.post_message(message);
         }
