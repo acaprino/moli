@@ -193,6 +193,7 @@ struct PreparedDownloadActivation {
 }
 
 struct PreparedNavigationDownload {
+    suggested_filename_hint: Option<String>,
     frame_id: String,
     response_url: Url,
     response_headers: Vec<(String, Vec<u8>)>,
@@ -487,13 +488,17 @@ impl CdpConnection {
             }
         };
 
-        self.prepare_download_from_response(
+        let mut prepared = self.prepare_download_from_response(
             command_owner,
             Some(&owner.browser_context_id),
             activation.frame_id.unwrap_or(owner.frame_id),
             response_url,
             CompletedDownloadBodyArtifact::from_body(response_body, response.headers),
-        )
+        )?;
+        if let Some(prepared) = &mut prepared {
+            prepared.suggested_filename_hint = activation.suggested_filename;
+        }
+        Ok(prepared)
     }
 
     fn prepare_navigation_download(
@@ -540,6 +545,7 @@ impl CdpConnection {
         let (response_body, response_headers) = body_artifact.into_parts();
 
         Ok(Some(PreparedNavigationDownload {
+            suggested_filename_hint: None,
             frame_id,
             response_url,
             response_headers,
@@ -863,6 +869,13 @@ async fn complete_navigation_download_async(
     sender: Option<&BackgroundEventSender>,
 ) -> Vec<BackgroundProtocolEvent> {
     let suggested_filename = filename_from_headers(&prepared.response_headers)
+        .or_else(|| {
+            prepared
+                .suggested_filename_hint
+                .as_deref()
+                .and_then(non_empty_filename)
+                .map(str::to_owned)
+        })
         .or_else(|| filename_from_url(&prepared.response_url))
         .unwrap_or_else(|| "download".to_owned());
     let artifact_name = artifact_file_name(
@@ -1575,6 +1588,64 @@ mod tests {
         use std::time::Duration;
 
         #[tokio::test]
+        async fn prefetched_blob_download_preserves_anchor_name_and_binary_content() {
+            for disposition in [None, Some("attachment; filename=server.bin")] {
+                let mut conn = CdpConnection::new();
+                let mut context = BrowserContext::new("blob-download-context".to_owned());
+                context.set_active_target_id("blob-download-target");
+                conn.install_browser_context_fixture_for_test(context);
+                let root = std::env::temp_dir().join(format!(
+                    "blob-download-{}",
+                    generate_download_guid().unwrap()
+                ));
+                conn.download_behavior.set_global(
+                    "allow".to_owned(),
+                    Some(root.to_string_lossy().into_owned()),
+                    true,
+                );
+                let owner = CommandOwnerScope::capture(&conn, None);
+                let bytes = vec![0, 255, 128, b'a', b'\r', b'\n'];
+                let mut headers = vec![(
+                    "Content-Type".to_owned(),
+                    b"application/octet-stream".to_vec(),
+                )];
+                if let Some(disposition) = disposition {
+                    headers.push((
+                        "Content-Disposition".to_owned(),
+                        disposition.as_bytes().to_vec(),
+                    ));
+                }
+                let delivery = conn
+                    .prepare_pending_download_activation_delivery(
+                        &owner,
+                        RendererPendingDownloadActivation {
+                            frame_id: None,
+                            url: "blob:https://download.test/retained".to_owned(),
+                            suggested_filename: Some("anchor.bin".to_owned()),
+                            response: Some(RendererPendingDownloadResponse {
+                                final_url: "blob:https://download.test/retained".to_owned(),
+                                status: 200,
+                                headers,
+                                body: bytes.clone().into(),
+                            }),
+                        },
+                        false,
+                    )
+                    .unwrap();
+                let mut events = Vec::new();
+                delivery.run(&mut events).await;
+                let name = if disposition.is_some() {
+                    "server.bin"
+                } else {
+                    "anchor.bin"
+                };
+                assert_eq!(tokio::fs::read(root.join(name)).await.unwrap(), bytes);
+                assert_eq!(std::fs::read_dir(&root).unwrap().count(), 1);
+                tokio::fs::remove_dir_all(root).await.unwrap();
+            }
+        }
+
+        #[tokio::test]
         async fn fetch_download_does_not_wait_for_command_output() {
             for abandoned in [false, true] {
                 assert_download_completes(false, abandoned).await;
@@ -1621,6 +1692,7 @@ mod tests {
             };
             let kind = if prefetched {
                 PreparedDownloadDeliveryKind::Prefetched(Box::new(PreparedNavigationDownload {
+                    suggested_filename_hint: None,
                     frame_id: "download-frame".into(),
                     response_url: url.parse().unwrap(),
                     response_headers: Vec::new(),
@@ -1730,6 +1802,7 @@ mod tests {
                 let artifact = root.join(&guid);
                 let registry = SharedDownloadRegistry::default();
                 let prepared = PreparedNavigationDownload {
+                    suggested_filename_hint: None,
                     frame_id: "child-frame".into(),
                     response_url: response.final_url.clone(),
                     response_headers: Vec::new(),

@@ -2114,11 +2114,33 @@ fn anchor_download_activation(
                 Some(download_request),
             )
         });
-    proceed.then_some(RendererPendingDownloadActivation {
+    if !proceed {
+        return None;
+    }
+    // Accept Blob bytes while the object URL still exists. The protocol may
+    // consume this activation after author script revokes the URL or retires
+    // its creator Document, just as for an already fetched attachment.
+    let response = url::Url::parse(&resolved)
+        .ok()
+        .filter(|url| url.scheme() == "blob")
+        .and_then(|url| crate::network_host::local_url_response(&url))
+        .map(|response| {
+            let (head, body) = response.into_body();
+            crate::runtime::RendererPendingDownloadResponse {
+                final_url: head.final_url.to_string(),
+                status: head.status,
+                headers: head.headers,
+                body: body
+                    .try_into_materialized_bytes()
+                    .expect("local Blob responses are materialized")
+                    .into(),
+            }
+        });
+    Some(RendererPendingDownloadActivation {
         frame_id,
         url: resolved,
         suggested_filename,
-        response: None,
+        response,
     })
 }
 
