@@ -25,3 +25,5 @@ mod upload_preflight;
 mod xhr;
 
 mod response_type;
+
+mod editing_shortcuts;

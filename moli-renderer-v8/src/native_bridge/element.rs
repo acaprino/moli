@@ -283,9 +283,10 @@ pub(crate) use events::construct_focus_event;
 use events::{ClickEventSource, construct_click_event};
 pub(crate) use events::{
     InputEventCoordinates, NodePublicEventDispatchOutcome, TextEditInputType, TouchEventPoint,
-    construct_command_event, construct_drag_event_with_related_target, construct_drop_input_event,
-    construct_input_event, construct_interest_event, construct_keyboard_event,
-    construct_mouse_event_for_target, construct_mouse_event_with_detail_for_target,
+    construct_clipboard_event, construct_command_event, construct_drag_event_with_related_target,
+    construct_drop_input_event, construct_input_event, construct_input_event_with_transfer,
+    construct_interest_event, construct_keyboard_event, construct_mouse_event_for_target,
+    construct_mouse_event_with_detail_for_target,
     construct_mouse_event_with_related_target_for_target, construct_pointer_event,
     construct_pointer_event_with_modifiers, construct_pointer_event_with_related_target,
     construct_pointer_event_with_related_target_and_modifiers, construct_simple_event,
@@ -2122,3 +2123,6 @@ pub(in crate::native_bridge::element) fn resolved_reflected_element_attribute_ha
 }
 
 pub(crate) use geometry::read_client_rects;
+
+pub(crate) use activation::clipboard::perform_clipboard_shortcut;
+pub(crate) use activation::editing_history::undo_redo as undo_redo_native_edit;

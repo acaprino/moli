@@ -1,5 +1,7 @@
 mod click;
+pub(crate) mod clipboard;
 mod default_action;
+pub(crate) mod editing_history;
 mod targets;
 mod text_input;
 

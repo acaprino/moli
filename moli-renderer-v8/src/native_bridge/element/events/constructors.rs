@@ -162,7 +162,7 @@ struct InputEventInitDeclaration<'scope> {
     data_transfer: v8::Local<'scope, v8::Value>,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum TextEditInputType {
     None,
     InsertText,
@@ -171,6 +171,10 @@ pub(crate) enum TextEditInputType {
     InsertFromDrop,
     DeleteContentBackward,
     DeleteContentForward,
+    HistoryUndo,
+    HistoryRedo,
+    InsertFromPaste,
+    DeleteByCut,
 }
 
 impl TextEditInputType {
@@ -183,17 +187,24 @@ impl TextEditInputType {
             Self::InsertFromDrop => "insertFromDrop",
             Self::DeleteContentBackward => "deleteContentBackward",
             Self::DeleteContentForward => "deleteContentForward",
+            Self::HistoryUndo => "historyUndo",
+            Self::HistoryRedo => "historyRedo",
+            Self::InsertFromPaste => "insertFromPaste",
+            Self::DeleteByCut => "deleteByCut",
         }
     }
 
     pub(crate) fn data(self, text: &str) -> Option<&str> {
         match self {
-            Self::InsertText | Self::InsertFromDrop => Some(text),
+            Self::InsertText | Self::InsertFromDrop | Self::InsertFromPaste => Some(text),
             Self::None
             | Self::InsertLineBreak
             | Self::InsertParagraph
             | Self::DeleteContentBackward
-            | Self::DeleteContentForward => None,
+            | Self::DeleteContentForward
+            | Self::HistoryUndo
+            | Self::HistoryRedo
+            | Self::DeleteByCut => None,
         }
     }
 }
@@ -937,7 +948,7 @@ pub(crate) fn construct_drop_input_event<'s>(
     )
 }
 
-fn construct_input_event_with_transfer<'s>(
+pub(crate) fn construct_input_event_with_transfer<'s>(
     scope: &mut v8::PinScope<'s, '_>,
     event_type: &str,
     input_type: TextEditInputType,
@@ -1170,4 +1181,23 @@ pub(crate) fn construct_wheel_event_for_target<'s>(
         buttons,
         modifiers,
     )
+}
+
+#[derive(WebApiObject)]
+#[webapi(plain, data_properties, enumerable)]
+struct ClipboardEventInitDeclaration<'scope> {
+    bubbles: bool,
+    cancelable: bool,
+    composed: bool,
+    clipboard_data: v8::Local<'scope, v8::Object>,
+}
+pub(crate) fn construct_clipboard_event<'s>(
+    scope: &mut v8::PinScope<'s, '_>,
+    kind: &str,
+    data: v8::Local<'s, v8::Object>,
+) -> Option<v8::Local<'s, v8::Object>> {
+    let init = ClipboardEventInitDeclaration::new(true, true, true, data)
+        .bind(scope)
+        .ok()?;
+    construct_event(scope, "ClipboardEvent", kind, init)
 }
