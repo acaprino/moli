@@ -665,6 +665,7 @@ fn input_file_list_cache_refreshes_after_external_file_selection_replacement() {
         vm.set_file_input_files(
             upload,
             vec![crate::dom::native::SelectedFile {
+                relative_path: String::new(),
                 bytes: b"alpha".to_vec(),
                 mime_type: "text/plain".to_owned(),
                 name: "first.txt".to_owned(),
@@ -696,6 +697,7 @@ fn input_file_list_cache_refreshes_after_external_file_selection_replacement() {
         vm.set_file_input_files(
             upload,
             vec![crate::dom::native::SelectedFile {
+                relative_path: String::new(),
                 bytes: b"bravo".to_vec(),
                 mime_type: "text/plain".to_owned(),
                 name: "second.txt".to_owned(),
