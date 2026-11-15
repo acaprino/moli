@@ -154,7 +154,26 @@ impl ProtocolServer {
         let addr = listener
             .local_addr()
             .context("failed to read bound protocol socket address")?;
+        let listener =
+            listener.tap_io(|stream| tcp_options::configure_accepted_protocol_stream(stream));
+        self.serve_on(listener, addr, control).await
+    }
 
+    /// Serve one instance on a caller-supplied listener, such as a private
+    /// local transport. `local_addr` is the server origin used by the Host and
+    /// Origin request guard; a transport without a socket address passes a
+    /// loopback address and must authenticate its own peers.
+    pub async fn serve_on<L>(
+        &self,
+        listener: L,
+        local_addr: SocketAddr,
+        control: BrowserInstanceControl,
+    ) -> Result<()>
+    where
+        L: axum::serve::Listener,
+        L::Addr: std::fmt::Debug,
+    {
+        let addr = local_addr;
         info!(%addr, "protocol server listening");
 
         let mut app_state = AppState::new_with_storage_partition_and_runtime_config(
@@ -168,19 +187,27 @@ impl ProtocolServer {
 
         #[cfg(feature = "ace-protocol")]
         self.notify_runtime_ready(&app_state);
-        serve_listener(listener, app_state).await
+        serve_listener_on(listener, app_state).await
     }
 }
 
 /// Shared by the executable and instance-lifecycle integration tests.
 async fn serve_listener(listener: TcpListener, app_state: AppState) -> Result<()> {
+    let listener =
+        listener.tap_io(|stream| tcp_options::configure_accepted_protocol_stream(stream));
+    serve_listener_on(listener, app_state).await
+}
+
+async fn serve_listener_on<L>(listener: L, app_state: AppState) -> Result<()>
+where
+    L: axum::serve::Listener,
+    L::Addr: std::fmt::Debug,
+{
     const SHUTDOWN_BUDGET: Duration = Duration::from_secs(5);
     let control = app_state.control.clone();
     let cdp_owner_registry = app_state.cdp_owner_registry.clone();
     let classic_session_registry = app_state.classic_session_registry.clone();
     let storage_partition = app_state.storage_partition.clone();
-    let listener =
-        listener.tap_io(|stream| tcp_options::configure_accepted_protocol_stream(stream));
     let stop_accepting = control.clone();
     let service = axum::ServiceExt::<Request<Body>>::into_make_service(build_router(app_state));
     let serving = axum::serve(listener, service)

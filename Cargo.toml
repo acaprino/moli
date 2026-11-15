@@ -2,6 +2,7 @@
 resolver = "3"
 members = [
     "moli",
+    "shinatama-moli-host",
     "moli-action-window",
     "moli-bounded-buffer",
     "moli-bounded-json",
